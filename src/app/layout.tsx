@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -12,10 +12,178 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const siteUrl = "https://excel-to-word-mapper.vercel.app";
+
+export const viewport: Viewport = {
+  themeColor: "#4f46e5",
+  width: "device-width",
+  initialScale: 1,
+};
+
 export const metadata: Metadata = {
-  title: "Excel to Word Mapper | Automated Document Generation",
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: "Excel to Word Mapper | Automated Bulk Mail Merge & Document Generator (DOCX & PDF)",
+    template: "%s | Excel to Word Mapper",
+  },
   description:
-    "Process Excel spreadsheets into personalized Word document templates using intelligent column-to-placeholder mapping and batch ZIP export.",
+    "Free in-browser bulk document generator & mail merge alternative. Map Excel (.xlsx, .csv) columns to Word (.docx) placeholders and export personalized Word documents or print-ready PDFs in batch ZIP. 100% private, client-side processing.",
+  keywords: [
+    "excel to word mapper",
+    "mail merge alternative",
+    "bulk docx generator",
+    "excel to pdf generator",
+    "automated document generation",
+    "batch word merge",
+    "excel spreadsheet to word template",
+    "free mail merge without word",
+    "generate pdf from excel data",
+    "client side mail merge",
+    "privacy first document generator",
+    "bulk certificate generator",
+    "batch invoice generator excel",
+    "docxtemplater online tool",
+    "open source mail merge",
+  ],
+  authors: [{ name: "JOEL-K-S", url: "https://github.com/JOEL-K-S/excel-to-word-mapper" }],
+  creator: "JOEL-K-S",
+  publisher: "JOEL-K-S",
+  applicationName: "Excel to Word Mapper",
+  category: "Productivity & Business Utility",
+  alternates: {
+    canonical: siteUrl,
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
+  openGraph: {
+    title: "Excel to Word Mapper | Free Bulk Mail Merge & Document Generator (DOCX & PDF)",
+    description:
+      "Automate personalized Word documents and PDFs from Excel spreadsheets. 100% client-side privacy, dynamic file naming, and fast ZIP batch download.",
+    url: siteUrl,
+    siteName: "Excel to Word Mapper",
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Excel to Word Mapper | In-Browser Bulk Mail Merge (DOCX & PDF)",
+    description:
+      "Merge Excel data into Word templates and download as DOCX or PDF in batch ZIP. Free & 100% private.",
+  },
+};
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebApplication",
+      "@id": `${siteUrl}/#webapp`,
+      "name": "Excel to Word Mapper",
+      "url": siteUrl,
+      "description":
+        "Free, 100% private in-browser document generation tool that maps Excel spreadsheet data into Word (.docx) templates and bulk exports personalized Word files or PDFs in ZIP.",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "All modern browsers (Chrome, Edge, Firefox, Safari)",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD",
+      },
+      "featureList": [
+        "100% Client-Side Privacy (Zero Server Uploads)",
+        "Intelligent Field Auto-Matching",
+        "Dual Format Export: Word (.docx) and Adobe PDF (.pdf)",
+        "Dynamic Custom Filename Formatting with {Column} tags",
+        "Batch ZIP Export with Real-time Progress Tracking",
+        "Interactive Single Record Test Mode",
+      ],
+      "browserRequirements": "Requires JavaScript. Requires HTML5.",
+    },
+    {
+      "@type": "HowTo",
+      "@id": `${siteUrl}/#howto`,
+      "name": "How to Bulk Generate Word Documents and PDFs from Excel",
+      "description":
+        "Step-by-step tutorial to mail merge Excel spreadsheets into Word and PDF documents without Microsoft Office.",
+      "step": [
+        {
+          "@type": "HowToStep",
+          "name": "Upload Excel Data and Word Template",
+          "text": "Upload an Excel workbook (.xlsx, .csv) and a Word document (.docx) containing {placeholder} tags.",
+        },
+        {
+          "@type": "HowToStep",
+          "name": "Match Placeholders to Columns",
+          "text": "Review the automated column matching or customize pairings and fallback values for each field.",
+        },
+        {
+          "@type": "HowToStep",
+          "name": "Select Format and Download",
+          "text": "Choose between Word (.docx) or PDF (.pdf) format, configure file naming patterns, and download single tests or a complete batch ZIP archive.",
+        },
+      ],
+    },
+    {
+      "@type": "FAQPage",
+      "@id": `${siteUrl}/#faq`,
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Is my Excel and Word document data secure?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text":
+              "Yes, 100%. Excel to Word Mapper runs entirely inside your browser. No spreadsheets, customer records, or templates are ever sent to an external server or stored in the cloud.",
+          },
+        },
+        {
+          "@type": "Question",
+          "name": "Can I export directly to PDF without Microsoft Word?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text":
+              "Yes. You can choose either Word (.docx) or PDF (.pdf) format before downloading. PDF conversion runs completely on the client side inside your browser.",
+          },
+        },
+        {
+          "@type": "Question",
+          "name": "How do I format placeholders in my Word template?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text":
+              "Simply wrap your tag names in single curly braces inside your Word document, for example: {Customer_Name}, {Invoice_Date}, or {Total_Amount}.",
+          },
+        },
+        {
+          "@type": "Question",
+          "name": "Can I give each generated document a unique filename?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text":
+              "Yes. You can use dynamic filename patterns such as {Customer_Name}_Invoice_{Invoice_No}.docx. The app will replace tags with each row's data automatically.",
+          },
+        },
+        {
+          "@type": "Question",
+          "name": "Why should I use this instead of Microsoft Word Mail Merge?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text":
+              "Traditional mail merge requires desktop Microsoft Office, is cumbersome to split into individual files, and doesn't natively batch export into PDF or custom named files without complex VBA macros. Excel to Word Mapper does all this in seconds right in your web browser.",
+          },
+        },
+      ],
+    },
+  ],
 };
 
 export default function RootLayout({
@@ -25,6 +193,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
+      <head>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+      </head>
       <body>{children}</body>
     </html>
   );

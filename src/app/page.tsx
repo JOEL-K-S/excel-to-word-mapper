@@ -23,6 +23,12 @@ import {
   Check,
   X,
   FileDown,
+  ShieldCheck,
+  Zap,
+  Award,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
 } from "lucide-react";
 import styles from "./page.module.css";
 import {
@@ -76,6 +82,7 @@ export default function Home() {
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successToast, setSuccessToast] = useState<string | null>(null);
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   // Hidden file input refs
   const excelInputRef = useRef<HTMLInputElement>(null);
@@ -1552,6 +1559,234 @@ function validateUploadedFile(
           </div>
         </div>
       )}
+
+      {/* ======================================================== */}
+      {/* SEO & AI DISCOVERY SECTION (Features, Use Cases, FAQ) */}
+      {/* ======================================================== */}
+      <section className={styles.seoSection} aria-label="Feature Guide and Frequently Asked Questions">
+        <header className={styles.seoHeader}>
+          <span className="badge badge-primary" style={{ marginBottom: "12px", display: "inline-block" }}>
+            The Modern Mail Merge Alternative
+          </span>
+          <h2>Automate Personalized Documents Directly in Your Browser</h2>
+          <p>
+            Excel to Word Mapper is a free, privacy-first document automation tool. 
+            Map spreadsheet columns to Word templates and export individual Word documents or converted PDFs in bulk ZIP archives—with zero server uploads.
+          </p>
+        </header>
+
+        {/* Feature Highlights Grid */}
+        <div className={styles.featuresGrid}>
+          <article className={styles.featureCard}>
+            <div className={styles.featureIconWrapper} style={{ background: "rgba(16, 185, 129, 0.15)", color: "var(--accent-emerald)" }}>
+              <ShieldCheck size={24} />
+            </div>
+            <h3 className={styles.featureTitle}>100% Client-Side Privacy</h3>
+            <p className={styles.featureDesc}>
+              Zero cloud server uploads. All spreadsheet parsing, template populating, and PDF rendering run locally in your browser memory. Compliant with GDPR, HIPAA, and internal confidentiality requirements.
+            </p>
+          </article>
+
+          <article className={styles.featureCard}>
+            <div className={styles.featureIconWrapper} style={{ background: "rgba(244, 63, 94, 0.15)", color: "var(--accent-rose)" }}>
+              <FileDown size={24} />
+            </div>
+            <h3 className={styles.featureTitle}>Dual Export: Word &amp; PDF</h3>
+            <p className={styles.featureDesc}>
+              Choose between editable Microsoft Word (.docx) documents and print-ready Adobe PDF (.pdf) files. No desktop Word or external conversion APIs needed.
+            </p>
+          </article>
+
+          <article className={styles.featureCard}>
+            <div className={styles.featureIconWrapper} style={{ background: "rgba(245, 158, 11, 0.15)", color: "var(--accent-amber)" }}>
+              <Zap size={24} />
+            </div>
+            <h3 className={styles.featureTitle}>Dynamic Custom Filenames</h3>
+            <p className={styles.featureDesc}>
+              Automatically name each generated document using spreadsheet values (e.g. <code>&#123;Candidate_Name&#125;_Offer_Letter.pdf</code>) for organized record-keeping.
+            </p>
+          </article>
+
+          <article className={styles.featureCard}>
+            <div className={styles.featureIconWrapper} style={{ background: "rgba(99, 102, 241, 0.15)", color: "var(--primary-light)" }}>
+              <Layers size={24} />
+            </div>
+            <h3 className={styles.featureTitle}>Intelligent Auto-Matching</h3>
+            <p className={styles.featureDesc}>
+              Fuzzy matching automatically pairs Word <code>&#123;tags&#125;</code> with Excel column headers, while allowing custom fallbacks and manual overrides.
+            </p>
+          </article>
+
+          <article className={styles.featureCard}>
+            <div className={styles.featureIconWrapper} style={{ background: "rgba(6, 182, 212, 0.15)", color: "var(--accent-cyan)" }}>
+              <FileArchive size={24} />
+            </div>
+            <h3 className={styles.featureTitle}>Batch ZIP Export</h3>
+            <p className={styles.featureDesc}>
+              Generate hundreds or thousands of personalized documents at once, bundled in a single organized ZIP archive with real-time progress tracking.
+            </p>
+          </article>
+
+          <article className={styles.featureCard}>
+            <div className={styles.featureIconWrapper} style={{ background: "rgba(168, 85, 247, 0.15)", color: "#c084fc" }}>
+              <Award size={24} />
+            </div>
+            <h3 className={styles.featureTitle}>No Microsoft Office Required</h3>
+            <p className={styles.featureDesc}>
+              Works on Windows, macOS, Linux, and Chromebooks right in Google Chrome, Microsoft Edge, Safari, and Firefox. No Office license or complex VBA macros.
+            </p>
+          </article>
+        </div>
+
+        {/* Supported Use Cases */}
+        <div className={styles.useCasesSection}>
+          <div style={{ textAlign: "center", maxWidth: "600px", margin: "0 auto" }}>
+            <h3 style={{ fontSize: "1.3rem", fontWeight: 800, color: "#ffffff" }}>
+              Popular Document Automation Use Cases
+            </h3>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.88rem", marginTop: "6px" }}>
+              Trusted by HR teams, educators, finance professionals, and business owners.
+            </p>
+          </div>
+
+          <div className={styles.useCasesGrid}>
+            <div className={styles.useCaseItem}>
+              <div className={styles.useCaseTitle}>
+                <Award size={18} style={{ color: "var(--accent-amber)" }} />
+                Certificates &amp; Diplomas
+              </div>
+              <p className={styles.useCaseDesc}>
+                Generate personalized certificates of completion, course awards, and event credentials with student names and dates.
+              </p>
+            </div>
+
+            <div className={styles.useCaseItem}>
+              <div className={styles.useCaseTitle}>
+                <FileText size={18} style={{ color: "var(--accent-cyan)" }} />
+                Invoices &amp; Receipts
+              </div>
+              <p className={styles.useCaseDesc}>
+                Bulk populate recurring invoices, client fee statements, and billing receipts from spreadsheet line items.
+              </p>
+            </div>
+
+            <div className={styles.useCaseItem}>
+              <div className={styles.useCaseTitle}>
+                <FileSpreadsheet size={18} style={{ color: "var(--primary-light)" }} />
+                HR &amp; Offer Letters
+              </div>
+              <p className={styles.useCaseDesc}>
+                Create candidate employment contracts, promotion letters, and NDA agreements with tailored salary and job title tags.
+              </p>
+            </div>
+
+            <div className={styles.useCaseItem}>
+              <div className={styles.useCaseTitle}>
+                <TableIcon size={18} style={{ color: "var(--accent-emerald)" }} />
+                Academic Report Cards
+              </div>
+              <p className={styles.useCaseDesc}>
+                Distribute student evaluations and term report cards from grading spreadsheets with zero confidential grade data leakage.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* FAQ Accordion */}
+        <div className={styles.faqSection}>
+          <div style={{ textAlign: "center", marginBottom: "20px" }}>
+            <h3 style={{ fontSize: "1.3rem", fontWeight: 800, color: "#ffffff" }}>
+              Frequently Asked Questions
+            </h3>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.88rem", marginTop: "4px" }}>
+              Quick answers to common questions about features, formats, and data security.
+            </p>
+          </div>
+
+          <div className={styles.faqList}>
+            {[
+              {
+                q: "How does Excel to Word Mapper protect my data privacy?",
+                a: "All operations are executed purely client-side using JavaScript, WebAssembly, and local browser memory. Neither your Excel spreadsheets nor your Word templates are transmitted to an external server or stored in the cloud. You can even run this tool offline once the page has loaded.",
+              },
+              {
+                q: "Can I generate print-ready PDF files as well as Word documents?",
+                a: "Yes! In Step 3, you can choose between Microsoft Word (.docx) or Adobe PDF (.pdf). The PDF conversion is rendered and converted directly in your browser without requiring Microsoft Word or desktop PDF printers.",
+              },
+              {
+                q: "How does this compare to Microsoft Word's desktop Mail Merge?",
+                a: "Traditional mail merge requires desktop Microsoft Office, is cumbersome to split into individual files, and doesn't natively batch export into PDF or custom named files without complex VBA macros. Excel to Word Mapper does all this in seconds right in your web browser.",
+              },
+              {
+                q: "How do I format placeholders in my Word template?",
+                a: "Simply wrap your tag names in single curly braces inside your Word document, for example: {Candidate_Name}, {Invoice_Date}, or {Total_Amount}. Word styling, fonts, tables, and colors will be preserved.",
+              },
+              {
+                q: "Can I customize the filename of each generated document?",
+                a: "Yes. You can use dynamic variables wrapped in curly braces like {Customer_Name}_Invoice_{Invoice_No}.docx. You can click on any column chip to insert it directly into the naming pattern.",
+              },
+              {
+                q: "Is there a limit on file size or the number of rows?",
+                a: "There are no arbitrary paywalls, user sign-ups, or record caps. You can process hundreds or thousands of rows. Processing speed depends entirely on your local computer's processor and memory.",
+              },
+            ].map((faq, idx) => {
+              const isOpen = openFaq === idx;
+              return (
+                <div key={idx} className={styles.faqItem}>
+                  <button
+                    type="button"
+                    className={styles.faqQuestion}
+                    onClick={() => setOpenFaq(isOpen ? null : idx)}
+                    aria-expanded={isOpen}
+                  >
+                    <span>{faq.q}</span>
+                    {isOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                  </button>
+                  {isOpen && (
+                    <div className={styles.faqAnswer}>
+                      <p>{faq.a}</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Semantic Footer */}
+        <footer className={styles.seoFooter}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: 700, color: "#ffffff" }}>
+            <FileSpreadsheet size={18} style={{ color: "var(--accent-emerald)" }} />
+            <span>Excel to Word Mapper</span>
+            <span style={{ color: "var(--text-dim)", fontWeight: 400 }}>— Private In-Browser Document Automation</span>
+          </div>
+
+          <div className={styles.footerLinks}>
+            <a
+              href="https://github.com/JOEL-K-S/excel-to-word-mapper"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="View Source on GitHub"
+            >
+              GitHub Repository <ExternalLink size={12} />
+            </a>
+            <a href="/llms.txt" target="_blank" rel="noopener noreferrer" title="AI Standard llms.txt">
+              AI Manifest (llms.txt) <ExternalLink size={12} />
+            </a>
+            <button
+              type="button"
+              onClick={() => setShowHelpModal(true)}
+              style={{ background: "none", border: "none", color: "var(--primary-light)", cursor: "pointer", fontSize: "0.85rem", padding: 0 }}
+            >
+              Formatting Guide
+            </button>
+          </div>
+
+          <p style={{ margin: 0, fontSize: "0.8rem", color: "var(--text-dim)" }}>
+            Free and open-source under the MIT License. 100% Client-Side. No telemetry or server storage.
+          </p>
+        </footer>
+      </section>
 
       {/* Guide & Placeholder Documentation Modal */}
       {showHelpModal && (
