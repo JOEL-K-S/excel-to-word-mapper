@@ -23,11 +23,11 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "Excel to Word Mapper | Automated Bulk Mail Merge & Document Generator (DOCX & PDF)",
+    default: "Excel to Word Mapper | Automated Document Generation",
     template: "%s | Excel to Word Mapper",
   },
   description:
-    "Free in-browser bulk document generator & mail merge alternative. Map Excel (.xlsx, .csv) columns to Word (.docx) placeholders and export personalized Word documents or print-ready PDFs in batch ZIP. 100% private, client-side processing.",
+    "Process Excel spreadsheets into personalized Word document templates using intelligent column-to-placeholder mapping and batch ZIP export. 100% private, client-side processing.",
   keywords: [
     "excel to word mapper",
     "mail merge alternative",
@@ -65,7 +65,7 @@ export const metadata: Metadata = {
     },
   },
   openGraph: {
-    title: "Excel to Word Mapper | Free Bulk Mail Merge & Document Generator (DOCX & PDF)",
+    title: "Excel to Word Mapper | Automated Document Generation",
     description:
       "Automate personalized Word documents and PDFs from Excel spreadsheets. 100% client-side privacy, dynamic file naming, and fast ZIP batch download.",
     url: siteUrl,
@@ -75,7 +75,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Excel to Word Mapper | In-Browser Bulk Mail Merge (DOCX & PDF)",
+    title: "Excel to Word Mapper | Automated Document Generation",
     description:
       "Merge Excel data into Word templates and download as DOCX or PDF in batch ZIP. Free & 100% private.",
   },
