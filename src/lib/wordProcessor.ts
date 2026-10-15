@@ -103,6 +103,31 @@ export function extractPlaceholdersFromDocx(arrayBuffer: ArrayBuffer): string[] 
 }
 
 /**
+ * Extracts formatted text paragraphs from a Word document preserving {tags}.
+ */
+export function extractTextFromDocx(arrayBuffer: ArrayBuffer): string {
+  try {
+    const zip = new PizZip(arrayBuffer);
+    const docFile = zip.files["word/document.xml"];
+    if (!docFile) return "";
+
+    let xml = docFile.asText();
+    // Normalize mail merge guillemets
+    xml = xml.replace(/«\s*([a-zA-Z0-9_\-\.\s#^/]+)\s*»/g, "{$1}");
+    xml = xml.replace(/&laquo;\s*([a-zA-Z0-9_\-\.\s#^/]+)\s*&raquo;/g, "{$1}");
+
+    // Replace paragraph endings with newlines
+    xml = xml.replace(/<\/w:p>/g, "\n\n");
+    // Strip XML tags
+    const plain = xml.replace(/<[^>]+>/g, "").trim();
+    return plain;
+  } catch (e) {
+    console.error("Error extracting text from docx:", e);
+    return "";
+  }
+}
+
+/**
  * Fortifies and sanitizes file names:
  * - Removes null bytes (\0)
  * - Replaces path traversal indicators (..)

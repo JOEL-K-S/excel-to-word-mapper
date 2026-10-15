@@ -32,6 +32,7 @@ import {
   FolderArchive,
   Eye,
   Copy,
+  Edit3,
 } from "lucide-react";
 import styles from "./page.module.css";
 import {
@@ -41,6 +42,7 @@ import {
 } from "@/lib/excelParser";
 import {
   extractPlaceholdersFromDocx,
+  extractTextFromDocx,
   generateSingleDocx,
   generateBatchZip,
   generateSampleWordTemplate,
@@ -50,6 +52,21 @@ import {
   GenerationProgress,
 } from "@/lib/wordProcessor";
 import { autoMapPlaceholders } from "@/lib/matcher";
+
+const DEFAULT_TEMPLATE_TEXT = `Date: {Offer_Date}
+
+{Candidate_Name}
+{Candidate_Address}
+
+Dear {Candidate_Name},
+
+We are exceptionally pleased to extend this formal offer of employment for the position of {Position_Title} within our {Department} division.
+
+Your starting annualized compensation will be {Annual_Salary}, payable in standard increments subject to standard deductions. Your anticipated start date is {Start_Date}, reporting directly to {Manager_Name}.
+
+Please sign and return this confirmation letter by {Deadline} to complete your onboarding schedule.
+
+Authorized Signature: Joel K. Sterling • People & Operations Lead`;
 
 export default function Home() {
   // Wizard navigation: 0 = Start, 1 = Excel, 2 = Word, 3 = Editor, 4 = Export
@@ -80,6 +97,13 @@ export default function Home() {
   const [batchFormat, setBatchFormat] = useState<"docx" | "pdf">("docx");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState<GenerationProgress | null>(null);
+
+  // Document Editor state
+  const [documentText, setDocumentText] = useState<string>(DEFAULT_TEMPLATE_TEXT);
+  const [canvasView, setCanvasView] = useState<"preview" | "editor" | "docx">("preview");
+  const [isRenderingDocx, setIsRenderingDocx] = useState(false);
+  const editorSheetRef = useRef<HTMLDivElement>(null);
+  const docxPreviewContainerRef = useRef<HTMLDivElement>(null);
 
   // UI status & helpers
   const [showTablePreview, setShowTablePreview] = useState(false);
@@ -161,10 +185,15 @@ export default function Home() {
 
       const buffer = await file.arrayBuffer();
       const placeholders = extractPlaceholdersFromDocx(buffer);
+      const extractedText = extractTextFromDocx(buffer);
 
       setRawWordBuffer(buffer);
       setWordFile({ name: file.name, size: file.size });
       setWordPlaceholders(placeholders);
+
+      if (extractedText && extractedText.trim().length > 0) {
+        setDocumentText(extractedText);
+      }
 
       // Auto-map if Excel data already exists
       if (excelData && excelData.headers.length > 0) {
@@ -195,9 +224,16 @@ export default function Home() {
       // 2. Generate Sample Word Template
       const wordBuf = generateSampleWordTemplate();
       const placeholders = extractPlaceholdersFromDocx(wordBuf);
+      const sampleText = extractTextFromDocx(wordBuf);
       setRawWordBuffer(wordBuf);
       setWordFile({ name: "Sample_Offer_Letter_Template.docx", size: wordBuf.byteLength });
       setWordPlaceholders(placeholders);
+
+      if (sampleText && sampleText.trim().length > 0) {
+        setDocumentText(sampleText);
+      } else {
+        setDocumentText(DEFAULT_TEMPLATE_TEXT);
+      }
 
       // 3. Auto-map tags
       const autoMappings = autoMapPlaceholders(placeholders, parsedExcel.headers);
@@ -363,13 +399,186 @@ export default function Home() {
   // Active row data helper for live canvas
   const activeRecord = excelData && excelData.rows.length > 0 ? excelData.rows[selectedPreviewRow] : null;
 
+  // Insert variable tag directly at current cursor/caret in the document editor
+  const insertVariableAtCursor = (ph: string) => {
+    const tagText = `{${ph}}`;
+
+    try {
+      navigator.clipboard.writeText(tagText);
+    } catch {
+      // ignore clipboard error
+    }
+
+    // Switch view to editor if not currently editing so the user sees the insertion
+    if (canvasView !== "editor") {
+      setCanvasView("editor");
+    }
+
+    setTimeout(() => {
+      const sheet = editorSheetRef.current;
+      if (!sheet) return;
+
+      sheet.focus();
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0) {
+        const range = sel.getRangeAt(0);
+        if (sheet.contains(range.commonAncestorContainer)) {
+          range.deleteContents();
+          const textNode = document.createTextNode(tagText);
+          range.insertNode(textNode);
+          range.setStartAfter(textNode);
+          range.setEndAfter(textNode);
+          sel.removeAllRanges();
+          sel.addRange(range);
+
+          const newText = sheet.innerText || sheet.textContent || "";
+          setDocumentText(newText);
+          triggerToast(`Inserted {${ph}} at cursor!`);
+          return;
+        }
+      }
+
+      // If no valid selection inside sheet, append to documentText
+      setDocumentText((prev) => {
+        const updated = prev ? `${prev} ${tagText}` : tagText;
+        if (sheet) {
+          sheet.innerText = updated;
+        }
+        return updated;
+      });
+      triggerToast(`Added {${ph}} to document!`);
+    }, 60);
+  };
+
+  // Keep editorSheetRef.current text in sync when entering editor view
+  React.useEffect(() => {
+    if (canvasView === "editor" && editorSheetRef.current) {
+      if (editorSheetRef.current.innerText !== documentText) {
+        editorSheetRef.current.innerText = documentText;
+      }
+    }
+  }, [canvasView, documentText]);
+
+  // Render high-fidelity docx preview using docx-preview when tab is active
+  React.useEffect(() => {
+    let isMounted = true;
+    if (canvasView === "docx" && rawWordBuffer && docxPreviewContainerRef.current) {
+      const container = docxPreviewContainerRef.current;
+      container.innerHTML = '<div style="text-align: center; padding: 40px; color: #64748b;">Rendering Word .docx layout...</div>';
+      setIsRenderingDocx(true);
+
+      (async () => {
+        try {
+          const row = activeRecord || {};
+          const payload: Record<string, any> = {};
+          wordPlaceholders.forEach((ph) => {
+            const col = mappings[ph];
+            if (col && row[col] !== undefined && row[col] !== null) {
+              payload[ph] = row[col];
+            } else if (defaultValues[ph] !== undefined && defaultValues[ph] !== "") {
+              payload[ph] = defaultValues[ph];
+            } else {
+              payload[ph] = "";
+            }
+          });
+          Object.keys(row).forEach((k) => {
+            if (!(k in payload)) payload[k] = row[k];
+          });
+
+          const docBlob = generateSingleDocx(rawWordBuffer, payload);
+          const arrayBuf = await docBlob.arrayBuffer();
+          const docx = await import("docx-preview");
+          if (!isMounted || !docxPreviewContainerRef.current) return;
+          docxPreviewContainerRef.current.innerHTML = "";
+          await docx.renderAsync(arrayBuf, docxPreviewContainerRef.current, undefined, {
+            inWrapper: false,
+            ignoreWidth: false,
+            ignoreHeight: false,
+            ignoreFonts: false,
+            breakPages: true,
+            useBase64URL: true,
+          });
+        } catch (err: any) {
+          console.error("Docx render error:", err);
+          if (isMounted && docxPreviewContainerRef.current) {
+            docxPreviewContainerRef.current.innerHTML = `<div style="text-align: center; padding: 40px; color: #ef4444;">Failed to render Word preview: ${err.message}</div>`;
+          }
+        } finally {
+          if (isMounted) setIsRenderingDocx(false);
+        }
+      })();
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [canvasView, selectedPreviewRow, rawWordBuffer, mappings, defaultValues, activeRecord]);
+
   const getInterpolatedValue = (tag: string, fallback: string = "") => {
     if (!activeRecord) return fallback || `{${tag}}`;
     const col = mappings[tag];
     if (col && activeRecord[col] !== undefined && activeRecord[col] !== null) {
       return String(activeRecord[col]);
     }
+    if (activeRecord[tag] !== undefined && activeRecord[tag] !== null) {
+      return String(activeRecord[tag]);
+    }
     return defaultValues[tag] || fallback || `{${tag}}`;
+  };
+
+  // Render live record preview with high-visibility pills for each interpolated tag
+  const renderPreviewContent = () => {
+    if (!documentText || documentText.trim().length === 0) {
+      return (
+        <div style={{ textAlign: "center", padding: "40px 20px", color: "#64748b" }}>
+          Template document is currently empty. Click <strong>"Template Editor"</strong> above to type or paste text and insert variable tags.
+        </div>
+      );
+    }
+
+    const paragraphs = documentText.split(/\n\n+/);
+    return paragraphs.map((para, pIdx) => {
+      const lines = para.split("\n");
+      return (
+        <p key={pIdx} style={{ marginBottom: "16px", whiteSpace: "pre-wrap" }}>
+          {lines.map((line, lIdx) => {
+            const parts: React.ReactNode[] = [];
+            const regex = /\{([a-zA-Z0-9_\-\.\s#^/]+)\}/g;
+            let lastIndex = 0;
+            let match: RegExpExecArray | null;
+
+            while ((match = regex.exec(line)) !== null) {
+              const matchIndex = match.index;
+              if (matchIndex > lastIndex) {
+                parts.push(line.substring(lastIndex, matchIndex));
+              }
+              const tag = match[1].trim();
+              const val = getInterpolatedValue(tag);
+              parts.push(
+                <span
+                  key={`${pIdx}-${lIdx}-${matchIndex}`}
+                  className={styles.highlightPill}
+                  title={`Variable Tag: {${tag}}`}
+                >
+                  {val}
+                </span>
+              );
+              lastIndex = regex.lastIndex;
+            }
+
+            if (lastIndex < line.length) {
+              parts.push(line.substring(lastIndex));
+            }
+
+            return (
+              <React.Fragment key={lIdx}>
+                {parts}
+                {lIdx < lines.length - 1 && <br />}
+              </React.Fragment>
+            );
+          })}
+        </p>
+      );
+    });
   };
 
   return (
@@ -1010,22 +1219,29 @@ export default function Home() {
                             <div className={styles.variableItemTop}>
                               <span
                                 className={styles.variableTagCode}
-                                title="Click to copy variable tag"
-                                onClick={() => {
-                                  navigator.clipboard.writeText(`{${ph}}`);
-                                  triggerToast(`Copied {${ph}} to clipboard!`);
-                                }}
+                                title="Click to insert at cursor into Document Editor"
+                                onClick={() => insertVariableAtCursor(ph)}
                               >
                                 &#123;{ph}&#125;
                               </span>
-                              <button
-                                type="button"
-                                onClick={() => handleRemovePlaceholder(ph)}
-                                style={{ background: "none", border: "none", color: "var(--text-dim)", cursor: "pointer", padding: "2px" }}
-                                title="Remove placeholder"
-                              >
-                                <Trash2 size={13} />
-                              </button>
+                              <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                                <button
+                                  type="button"
+                                  className={styles.insertBtn}
+                                  onClick={() => insertVariableAtCursor(ph)}
+                                  title="Insert tag at cursor in document"
+                                >
+                                  <Plus size={12} /> Insert
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemovePlaceholder(ph)}
+                                  style={{ background: "none", border: "none", color: "var(--text-dim)", cursor: "pointer", padding: "2px" }}
+                                  title="Remove placeholder"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
                             </div>
 
                             <select
@@ -1065,11 +1281,43 @@ export default function Home() {
                 {/* Right: Live Document Paper Canvas */}
                 <div className={styles.paperCanvasWrapper}>
                   <div className={styles.paperSheetTopBar}>
-                    <div className={styles.paperSheetStatus}>
-                      <div className={styles.paperSheetStatusDot} />
-                      <span>Live Interpolated Document Sheet (Record #{selectedPreviewRow + 1})</span>
+                    {/* View Switcher Tabs */}
+                    <div className={styles.canvasModeTabs}>
+                      <button
+                        type="button"
+                        className={`${styles.canvasModeBtn} ${
+                          canvasView === "preview" ? styles.canvasModeBtnActive : ""
+                        }`}
+                        onClick={() => setCanvasView("preview")}
+                        title="Live Record Preview"
+                      >
+                        <Eye size={14} /> Live Record Preview
+                      </button>
+                      <button
+                        type="button"
+                        className={`${styles.canvasModeBtn} ${
+                          canvasView === "editor" ? styles.canvasModeBtnActive : ""
+                        }`}
+                        onClick={() => setCanvasView("editor")}
+                        title="Template Editor"
+                      >
+                        <Edit3 size={14} /> Template Editor
+                      </button>
+                      {rawWordBuffer && (
+                        <button
+                          type="button"
+                          className={`${styles.canvasModeBtn} ${
+                            canvasView === "docx" ? styles.canvasModeBtnActive : ""
+                          }`}
+                          onClick={() => setCanvasView("docx")}
+                          title="Word .docx Layout View"
+                        >
+                          <FileText size={14} /> Word .docx View
+                        </button>
+                      )}
                     </div>
 
+                    {/* Zoom / Font Size controls */}
                     <div className={styles.zoomButtonGroup}>
                       <button
                         type="button"
@@ -1090,50 +1338,60 @@ export default function Home() {
                     </div>
                   </div>
 
-                  {/* Simulated Paper Canvas */}
-                  <div
-                    className={styles.paperSheet}
-                    style={{ fontSize: `${canvasFontSize}px` }}
-                    contentEditable
-                    suppressContentEditableWarning
-                  >
-                    <div style={{ textAlign: "right", fontSize: "0.85em", color: "#64748b", marginBottom: "24px", fontFamily: "var(--font-code)" }}>
-                      Date: <span className={styles.highlightPill}>{getInterpolatedValue("Offer_Date", "October 14, 2026")}</span>
+                  {/* Canvas Body */}
+                  {canvasView === "editor" ? (
+                    <div>
+                      <div
+                        ref={editorSheetRef}
+                        className={`${styles.paperSheet} ${styles.editableSheet}`}
+                        style={{ fontSize: `${canvasFontSize}px` }}
+                        contentEditable
+                        suppressContentEditableWarning
+                        onInput={(e) => {
+                          setDocumentText(e.currentTarget.innerText || "");
+                        }}
+                        onBlur={(e) => {
+                          setDocumentText(e.currentTarget.innerText || "");
+                        }}
+                      />
+                      <div style={{ marginTop: "8px", fontSize: "0.78rem", color: "var(--text-dim)", display: "flex", justifyContent: "space-between" }}>
+                        <span>Type anywhere to edit. Click any tag or "+ Insert" on the left to place at cursor.</span>
+                        <span>{documentText.length} characters</span>
+                      </div>
                     </div>
-
-                    <div style={{ fontWeight: 800, fontSize: "1.25em", color: "#0f172a", marginBottom: "4px" }}>
-                      <span className={styles.highlightPill}>{getInterpolatedValue("Candidate_Name", "Recipient Legal Name")}</span>
+                  ) : canvasView === "docx" ? (
+                    <div>
+                      <div
+                        ref={docxPreviewContainerRef}
+                        className={styles.docxPreviewWrapper}
+                        style={{ fontSize: `${canvasFontSize}px` }}
+                      />
+                      {isRenderingDocx && (
+                        <div style={{ marginTop: "6px", fontSize: "0.78rem", color: "var(--accent-rose)", textAlign: "center" }}>
+                          Rendering high-fidelity Word preview...
+                        </div>
+                      )}
                     </div>
-                    <div style={{ fontSize: "0.9em", color: "#64748b", marginBottom: "24px" }}>
-                      <span className={styles.highlightPill}>{getInterpolatedValue("Candidate_Address", "742 Evergreen Terrace, Seattle, WA")}</span>
+                  ) : (
+                    <div>
+                      <div
+                        className={styles.paperSheet}
+                        style={{ fontSize: `${canvasFontSize}px` }}
+                      >
+                        {renderPreviewContent()}
+                      </div>
+                      <div style={{ marginTop: "8px", fontSize: "0.78rem", color: "var(--text-dim)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span>Showing document merged with <strong>Record #{selectedPreviewRow + 1}</strong>.</span>
+                        <button
+                          type="button"
+                          onClick={() => setCanvasView("editor")}
+                          style={{ background: "none", border: "none", color: "var(--accent-rose)", cursor: "pointer", fontSize: "0.78rem", fontWeight: 600, display: "flex", alignItems: "center", gap: "4px" }}
+                        >
+                          <Edit3 size={13} /> Edit Template Text
+                        </button>
+                      </div>
                     </div>
-
-                    <p style={{ marginBottom: "16px" }}>
-                      Dear <span className={styles.highlightPill}>{getInterpolatedValue("Candidate_Name", "Candidate")}</span>,
-                    </p>
-
-                    <p style={{ marginBottom: "16px" }}>
-                      We are exceptionally pleased to extend this formal offer of employment for the position of{" "}
-                      <span className={styles.highlightPill}>{getInterpolatedValue("Position_Title", "Principal Product Architect")}</span> within our{" "}
-                      <span className={styles.highlightPill}>{getInterpolatedValue("Department", "Core Systems")}</span> division.
-                    </p>
-
-                    <p style={{ marginBottom: "16px" }}>
-                      Your starting annualized compensation will be{" "}
-                      <span className={styles.highlightPill}>{getInterpolatedValue("Annual_Salary", "$185,000 USD")}</span>, payable in standard increments subject to standard deductions. Your anticipated start date is{" "}
-                      <span className={styles.highlightPill}>{getInterpolatedValue("Start_Date", "November 2, 2026")}</span>, reporting directly to{" "}
-                      <span className={styles.highlightPill}>{getInterpolatedValue("Manager_Name", "David K. Lindqvist")}</span>.
-                    </p>
-
-                    <p style={{ marginBottom: "32px" }}>
-                      Please sign and return this confirmation letter by{" "}
-                      <span className={styles.highlightPill}>{getInterpolatedValue("Deadline", "October 25, 2026")}</span> to complete your onboarding schedule.
-                    </p>
-
-                    <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: "20px", fontSize: "0.88em", color: "#64748b" }}>
-                      Authorized Signature: <span style={{ fontStyle: "italic", fontFamily: "serif", fontWeight: 700, color: "#0f172a" }}>Joel K. Sterling</span> • People &amp; Operations Lead
-                    </div>
-                  </div>
+                  )}
 
                   {/* Navigation Footer */}
                   <div className={styles.stepNavFooter}>

@@ -612,6 +612,63 @@
   color: #ffffff;
 }
 
+.canvasModeTabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 3px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.canvasModeBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.canvasModeBtn:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.canvasModeBtnActive {
+  background: var(--accent-rose);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(244, 63, 94, 0.35);
+}
+
+.insertBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(244, 63, 94, 0.15);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  color: #fb7185;
+  border-radius: 5px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.insertBtn:hover {
+  background: var(--accent-rose);
+  color: #ffffff;
+  border-color: var(--accent-rose);
+}
+
 .paperSheet {
   background: #ffffff;
   color: #1e293b;
@@ -622,6 +679,30 @@
   font-family: var(--font-main);
   line-height: 1.7;
   position: relative;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.editableSheet {
+  outline: none;
+  cursor: text;
+  white-space: pre-wrap;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.editableSheet:focus {
+  border-color: var(--accent-rose);
+  box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.2), 0 16px 40px rgba(0, 0, 0, 0.6);
+}
+
+.docxPreviewWrapper {
+  background: #f8fafc;
+  color: #0f172a;
+  border-radius: var(--radius-md);
+  padding: 24px;
+  min-height: 520px;
+  max-height: 720px;
+  overflow-y: auto;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
