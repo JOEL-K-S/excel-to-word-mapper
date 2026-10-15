@@ -65,6 +65,21 @@ Traditional Microsoft Word Mail Merge is slow, requires a desktop Microsoft 365 
 
 ---
 
+## 📚 Documentation
+
+Quick links to guides, privacy specifications, and technical standards:
+
+| I want to | Read |
+|---|---|
+| Learn how to format `{tags}` & spreadsheets | [Template & Workflow Guide](#-step-by-step-workflow) |
+| Review the 100% zero-server privacy guarantee | [Privacy Policy](src/app/privacy/page.tsx) / [/privacy](https://excel-to-word-mapper.vercel.app/privacy) |
+| Inspect security architecture & report vulnerabilities | [Security Policy](SECURITY.md) |
+| Read the AI search & LLM ingestion manifest | [AI Manifest (`llms.txt`)](public/llms.txt) |
+| Review agent rules & architectural invariants | [Engineering Standards](AGENTS.md) |
+| Understand open-source license & permissions | [MIT License](LICENSE) |
+
+---
+
 ## 💻 Local Development
 
 ```bash
