@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useTransition } from "react";
+import Link from "next/link";
 import {
   FileSpreadsheet,
   FileText,
@@ -1773,6 +1774,9 @@ function validateUploadedFile(
             <a href="/llms.txt" target="_blank" rel="noopener noreferrer" title="AI Standard llms.txt">
               AI Manifest (llms.txt) <ExternalLink size={12} />
             </a>
+            <Link href="/privacy" title="Privacy Policy & Security">
+              Privacy Policy
+            </Link>
             <button
               type="button"
               onClick={() => setShowHelpModal(true)}
