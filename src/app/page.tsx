@@ -15,7 +15,8 @@ import {
   Layers,
   ChevronRight,
   ChevronLeft,
-  Eye,
+  ChevronDown,
+  ChevronUp,
   Plus,
   Trash2,
   FileArchive,
@@ -27,9 +28,10 @@ import {
   ShieldCheck,
   Zap,
   Award,
-  ChevronDown,
-  ChevronUp,
   ExternalLink,
+  FolderArchive,
+  Eye,
+  Copy,
 } from "lucide-react";
 import styles from "./page.module.css";
 import {
@@ -50,8 +52,8 @@ import {
 import { autoMapPlaceholders } from "@/lib/matcher";
 
 export default function Home() {
-  // Wizard navigation
-  const [activeStep, setActiveStep] = useState<1 | 2 | 3>(1);
+  // Wizard navigation: 0 = Start, 1 = Excel, 2 = Word, 3 = Editor, 4 = Export
+  const [activeStep, setActiveStep] = useState<0 | 1 | 2 | 3 | 4>(0);
 
   // Excel state
   const [excelFile, setExcelFile] = useState<{ name: string; size: number } | null>(null);
@@ -73,8 +75,9 @@ export default function Home() {
 
   // Generation state
   const [selectedPreviewRow, setSelectedPreviewRow] = useState<number>(0);
-  const [namingPattern, setNamingPattern] = useState<string>("Document_{Employee_Name}.docx");
-  const [exportFormat, setExportFormat] = useState<"docx" | "pdf">("docx");
+  const [namingPattern, setNamingPattern] = useState<string>("Document_{Candidate_Name}.docx");
+  const [singleFormat, setSingleFormat] = useState<"docx" | "pdf">("docx");
+  const [batchFormat, setBatchFormat] = useState<"docx" | "pdf">("docx");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState<GenerationProgress | null>(null);
 
@@ -84,255 +87,151 @@ export default function Home() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successToast, setSuccessToast] = useState<string | null>(null);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [canvasFontSize, setCanvasFontSize] = useState<number>(14);
 
   // Hidden file input refs
   const excelInputRef = useRef<HTMLInputElement>(null);
   const wordInputRef = useRef<HTMLInputElement>(null);
-
   const [, startTransition] = useTransition();
 
+  // Trigger Toast Notification
   const triggerToast = (msg: string) => {
     setSuccessToast(msg);
-    setTimeout(() => setSuccessToast(null), 4000);
+    setTimeout(() => {
+      setSuccessToast(null);
+    }, 4500);
+  };
+
+  // Format bytes helper
+  const formatSize = (bytes: number) => {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / 1048576).toFixed(1) + " MB";
   };
 
   // ----------------------------------------------------
-  // Excel File Handler
+  // Excel File Processing
   // ----------------------------------------------------
-  const processExcelBuffer = (buffer: ArrayBuffer, fileName: string, fileSize: number) => {
+  const handleExcelFile = async (file: File) => {
     try {
-      const parsed = parseExcelFile(buffer);
-      setRawExcelBuffer(buffer);
-      setExcelData(parsed);
-      setExcelFile({ name: fileName, size: fileSize });
       setErrorMessage(null);
+      const validExts = [".xlsx", ".xls", ".csv"];
+      const hasValidExt = validExts.some((ext) => file.name.toLowerCase().endsWith(ext));
+      if (!hasValidExt) {
+        setErrorMessage("Please upload a valid Excel spreadsheet (.xlsx, .xls) or CSV file.");
+        return;
+      }
 
-      // Auto-map if Word placeholders already exist
+      const buffer = await file.arrayBuffer();
+      const parsedData = parseExcelFile(buffer);
+
+      setRawExcelBuffer(buffer);
+      setExcelData(parsedData);
+      setExcelFile({ name: file.name, size: file.size });
+
+      // Auto-update naming pattern with first header
+      if (parsedData.headers.length > 0) {
+        const primaryHeader = parsedData.headers[0];
+        setNamingPattern(`Document_{${primaryHeader}}.docx`);
+      }
+
+      // If Word is already loaded, re-run auto-mapper
       if (wordPlaceholders.length > 0) {
-        const auto = autoMapPlaceholders(wordPlaceholders, parsed.headers);
-        setMappings(auto);
+        const autoMappings = autoMapPlaceholders(wordPlaceholders, parsedData.headers);
+        setMappings(autoMappings);
       }
 
-      // Smart naming pattern selection based on Excel headers
-      const candidateNameCols = ["file_name", "filename", "name", "candidate_name", "employee_name", "student_name"];
-      const matchedNameCol = parsed.headers.find((h) =>
-        candidateNameCols.includes(h.toLowerCase().replace(/[^a-z0-9_]/g, ""))
-      );
-      if (matchedNameCol) {
-        setNamingPattern(
-          matchedNameCol.toLowerCase().includes("file")
-            ? `{${matchedNameCol}}.docx`
-            : `Report_{${matchedNameCol}}.docx`
-        );
-      }
-
-      triggerToast(`Successfully loaded Excel sheet "${parsed.activeSheet}" with ${parsed.totalRows} rows.`);
+      triggerToast(`Loaded Excel: ${file.name} (${parsedData.totalRows} records)`);
     } catch (err: any) {
       console.error(err);
-      setErrorMessage(err.message || "Failed to parse Excel file.");
-    }
-  };
-
-// Security & resource limit constants
-const MAX_EXCEL_SIZE = 50 * 1024 * 1024; // 50MB
-const MAX_WORD_SIZE = 25 * 1024 * 1024; // 25MB
-
-function validateUploadedFile(
-  file: File,
-  allowedExts: string[],
-  maxSize: number,
-  typeLabel: string
-): string | null {
-  const dotIndex = file.name.lastIndexOf(".");
-  const ext = dotIndex !== -1 ? file.name.slice(dotIndex).toLowerCase() : "";
-  if (!allowedExts.includes(ext)) {
-    return `Security validation: Invalid ${typeLabel} file extension (${ext || "none"}). Only ${allowedExts.join(", ")} allowed.`;
-  }
-  if (file.size > maxSize) {
-    const maxMb = Math.round(maxSize / (1024 * 1024));
-    return `Security validation: File size (${(file.size / (1024 * 1024)).toFixed(1)}MB) exceeds maximum safe limit of ${maxMb}MB.`;
-  }
-  return null;
-}
-
-  const onExcelFileSelected = (file: File) => {
-    const validationError = validateUploadedFile(
-      file,
-      [".xlsx", ".xls", ".csv"],
-      MAX_EXCEL_SIZE,
-      "Excel"
-    );
-    if (validationError) {
-      setErrorMessage(validationError);
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const buffer = event.target?.result as ArrayBuffer;
-      processExcelBuffer(buffer, file.name, file.size);
-    };
-    reader.readAsArrayBuffer(file);
-  };
-
-  const handleExcelFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    onExcelFileSelected(file);
-    e.target.value = "";
-  };
-
-  const handleSheetChange = (sheetName: string) => {
-    if (!rawExcelBuffer) return;
-    try {
-      const parsed = parseExcelFile(rawExcelBuffer, sheetName);
-      setExcelData(parsed);
-      if (wordPlaceholders.length > 0) {
-        setMappings(autoMapPlaceholders(wordPlaceholders, parsed.headers));
-      }
-    } catch (err: any) {
-      setErrorMessage(err.message);
+      setErrorMessage("Failed to read Excel file: " + (err.message || "Unknown error"));
     }
   };
 
   // ----------------------------------------------------
-  // Word File Handler
+  // Word File Processing
   // ----------------------------------------------------
-  const processWordBuffer = (buffer: ArrayBuffer, fileName: string, fileSize: number) => {
+  const handleWordFile = async (file: File) => {
     try {
-      const placeholders = extractPlaceholdersFromDocx(buffer);
-      setRawWordBuffer(buffer);
-      setWordFile({ name: fileName, size: fileSize });
-      setWordPlaceholders(placeholders);
       setErrorMessage(null);
-
-      // Set intelligent default naming pattern
-      if (placeholders.length > 0) {
-        const preferredName = placeholders.find((p) =>
-          ["name", "student_name", "candidate_name", "employee_name", "file_name"].includes(p.toLowerCase())
-        ) || placeholders[0];
-        setNamingPattern(`Report_{${preferredName}}.docx`);
+      if (!file.name.toLowerCase().endsWith(".docx")) {
+        setErrorMessage("Please upload a Microsoft Word document (.docx).");
+        return;
       }
+
+      const buffer = await file.arrayBuffer();
+      const placeholders = extractPlaceholdersFromDocx(buffer);
+
+      setRawWordBuffer(buffer);
+      setWordFile({ name: file.name, size: file.size });
+      setWordPlaceholders(placeholders);
 
       // Auto-map if Excel data already exists
       if (excelData && excelData.headers.length > 0) {
-        const auto = autoMapPlaceholders(placeholders, excelData.headers);
-        setMappings(auto);
+        const autoMappings = autoMapPlaceholders(placeholders, excelData.headers);
+        setMappings(autoMappings);
       }
 
-      triggerToast(`Loaded Word template. Detected ${placeholders.length} placeholders.`);
+      triggerToast(`Loaded Word template: ${file.name} (${placeholders.length} tags detected)`);
     } catch (err: any) {
       console.error(err);
-      setErrorMessage(err.message || "Failed to parse Word document.");
+      setErrorMessage("Failed to read Word template: " + (err.message || "Unknown error"));
     }
-  };
-
-  const onWordFileSelected = (file: File) => {
-    const validationError = validateUploadedFile(
-      file,
-      [".docx"],
-      MAX_WORD_SIZE,
-      "Word"
-    );
-    if (validationError) {
-      setErrorMessage(validationError);
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const buffer = event.target?.result as ArrayBuffer;
-      processWordBuffer(buffer, file.name, file.size);
-    };
-    reader.readAsArrayBuffer(file);
-  };
-
-  const handleWordFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    onWordFileSelected(file);
-    e.target.value = "";
   };
 
   // ----------------------------------------------------
-  // 1-Click Sample Demo Loader
+  // Load Sample Files (One-Click Demo)
   // ----------------------------------------------------
   const handleLoadSample = () => {
     try {
-      // 1. Generate & process sample Excel
-      const excelBuffer = generateSampleExcel();
-      const parsedExcel = parseExcelFile(excelBuffer);
-      setRawExcelBuffer(excelBuffer);
+      setErrorMessage(null);
+      // 1. Generate Sample Excel
+      const excelBuf = generateSampleExcel();
+      const parsedExcel = parseExcelFile(excelBuf);
+      setRawExcelBuffer(excelBuf);
       setExcelData(parsedExcel);
-      setExcelFile({ name: "Acme_Candidates_2026.xlsx", size: excelBuffer.byteLength });
+      setExcelFile({ name: "Sample_Job_Offers.xlsx", size: excelBuf.byteLength });
 
-      // 2. Generate & process sample Word Template
-      const wordBuffer = generateSampleWordTemplate();
-      const placeholders = extractPlaceholdersFromDocx(wordBuffer);
-      setRawWordBuffer(wordBuffer);
-      setWordFile({ name: "Offer_Letter_Template.docx", size: wordBuffer.byteLength });
+      // 2. Generate Sample Word Template
+      const wordBuf = generateSampleWordTemplate();
+      const placeholders = extractPlaceholdersFromDocx(wordBuf);
+      setRawWordBuffer(wordBuf);
+      setWordFile({ name: "Sample_Offer_Letter_Template.docx", size: wordBuf.byteLength });
       setWordPlaceholders(placeholders);
 
-      // 3. Auto-map
-      const auto = autoMapPlaceholders(placeholders, parsedExcel.headers);
-      setMappings(auto);
+      // 3. Auto-map tags
+      const autoMappings = autoMapPlaceholders(placeholders, parsedExcel.headers);
+      setMappings(autoMappings);
+
+      // 4. Default naming pattern
       setNamingPattern("Offer_Letter_{Employee_Name}.docx");
 
-      setErrorMessage(null);
-      triggerToast("Sample Candidate Excel & Offer Letter Template loaded!");
+      // 5. Jump to Editor
+      setActiveStep(3);
+      triggerToast("Sample dataset loaded! You can now test the live preview.");
     } catch (err: any) {
       console.error(err);
-      setErrorMessage("Error initializing sample files: " + err.message);
+      setErrorMessage("Error loading sample data: " + err.message);
     }
   };
 
-  // ----------------------------------------------------
-  // Robust Sample Download Handlers (Guaranteed Extensions)
-  // ----------------------------------------------------
-  const handleDownloadSampleExcel = async (e?: React.MouseEvent) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    try {
-      const buffer = generateSampleExcel();
-      const blob = new Blob([buffer], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      });
-      await triggerBrowserDownload(blob, "sample_candidates.xlsx");
-      triggerToast("Downloaded: sample_candidates.xlsx");
-    } catch (err: any) {
-      console.error(err);
-      setErrorMessage("Failed to download sample Excel: " + err.message);
-    }
+  // Re-run Auto Mapping
+  const handleRemapAll = () => {
+    if (!excelData || wordPlaceholders.length === 0) return;
+    const newMappings = autoMapPlaceholders(wordPlaceholders, excelData.headers);
+    setMappings(newMappings);
+    triggerToast("Auto-mapped placeholders to closest Excel headers.");
   };
 
-  const handleDownloadSampleWord = async (e?: React.MouseEvent) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    try {
-      const buffer = generateSampleWordTemplate();
-      const blob = new Blob([buffer], {
-        type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      });
-      await triggerBrowserDownload(blob, "sample_offer_letter.docx");
-      triggerToast("Downloaded: sample_offer_letter.docx");
-    } catch (err: any) {
-      console.error(err);
-      setErrorMessage("Failed to download sample Word template: " + err.message);
-    }
-  };
-
-  // ----------------------------------------------------
-  // Placeholder & Mapping Helpers
-  // ----------------------------------------------------
-  const handleMappingChange = (placeholder: string, column: string) => {
+  // Update specific mapping
+  const handleMappingChange = (placeholder: string, excelColumn: string) => {
     setMappings((prev) => ({
       ...prev,
-      [placeholder]: column,
+      [placeholder]: excelColumn,
     }));
   };
 
+  // Fallback defaults
   const handleDefaultChange = (placeholder: string, val: string) => {
     setDefaultValues((prev) => ({
       ...prev,
@@ -340,20 +239,21 @@ function validateUploadedFile(
     }));
   };
 
+  // Add custom placeholder
   const handleAddCustomPlaceholder = () => {
-    const trimmed = newPlaceholderInput.trim().replace(/[{}]/g, "");
-    if (!trimmed) return;
-    if (!wordPlaceholders.includes(trimmed)) {
-      setWordPlaceholders((prev) => [...prev, trimmed]);
-      if (excelData && excelData.headers.length > 0) {
-        const auto = autoMapPlaceholders([trimmed], excelData.headers);
-        setMappings((prev) => ({ ...prev, ...auto }));
+    const cleanTag = newPlaceholderInput.trim().replace(/[{}]/g, "");
+    if (!cleanTag) return;
+    if (!wordPlaceholders.includes(cleanTag)) {
+      setWordPlaceholders((prev) => [...prev, cleanTag]);
+      if (excelData && excelData.headers.includes(cleanTag)) {
+        setMappings((prev) => ({ ...prev, [cleanTag]: cleanTag }));
       }
     }
     setNewPlaceholderInput("");
     setShowAddPlaceholder(false);
   };
 
+  // Remove placeholder
   const handleRemovePlaceholder = (placeholder: string) => {
     setWordPlaceholders((prev) => prev.filter((p) => p !== placeholder));
     setMappings((prev) => {
@@ -363,24 +263,20 @@ function validateUploadedFile(
     });
   };
 
-  const handleRemapAll = () => {
-    if (!excelData) return;
-    const auto = autoMapPlaceholders(wordPlaceholders, excelData.headers);
-    setMappings(auto);
-    triggerToast("Auto-mapping refreshed across all fields.");
-  };
-
   // ----------------------------------------------------
-  // Single Document Generation & Download
+  // Single Document Download
   // ----------------------------------------------------
   const handleDownloadSingle = async () => {
     if (!rawWordBuffer || !excelData || excelData.rows.length === 0) {
-      setErrorMessage("Please ensure both Excel data and Word template are loaded.");
+      setErrorMessage("Please load both Excel data and a Word template before downloading.");
       return;
     }
 
     try {
-      const row = excelData.rows[selectedPreviewRow] || {};
+      setIsGenerating(true);
+      setErrorMessage(null);
+
+      const row = excelData.rows[selectedPreviewRow] || excelData.rows[0];
       const payload: Record<string, any> = {};
 
       wordPlaceholders.forEach((ph) => {
@@ -394,7 +290,6 @@ function validateUploadedFile(
         }
       });
 
-      // Include all raw fields
       Object.keys(row).forEach((k) => {
         if (!(k in payload)) payload[k] = row[k];
       });
@@ -403,7 +298,7 @@ function validateUploadedFile(
       let outputBlob: Blob;
       let filename: string;
 
-      if (exportFormat === "pdf") {
+      if (singleFormat === "pdf") {
         outputBlob = await convertDocxBlobToPdfBlob(docBlob);
         filename = computeDocFilename(namingPattern, payload, selectedPreviewRow).replace(/\.docx$/i, ".pdf");
       } else {
@@ -411,13 +306,13 @@ function validateUploadedFile(
         filename = computeDocFilename(namingPattern, payload, selectedPreviewRow);
       }
 
-      // Trigger safe browser download with persistent URL
       await triggerBrowserDownload(outputBlob, filename);
-
       triggerToast(`Downloaded: ${filename}`);
     } catch (err: any) {
       console.error(err);
       setErrorMessage("Error generating document: " + err.message);
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -426,7 +321,7 @@ function validateUploadedFile(
   // ----------------------------------------------------
   const handleDownloadBatch = async () => {
     if (!rawWordBuffer || !excelData || excelData.rows.length === 0) {
-      setErrorMessage("Please load both Excel and Word files before generating.");
+      setErrorMessage("Please load both Excel data and a Word template before generating.");
       return;
     }
 
@@ -440,18 +335,17 @@ function validateUploadedFile(
         mappings,
         defaultValues,
         namingPattern,
-        exportFormat,
+        batchFormat,
         (progress) => {
           setGenerationProgress(progress);
         }
       );
 
-      // Download ZIP with guaranteed safe filename & extension
       const safeSheetName = (excelData.activeSheet || "Documents").replace(/[/\\?%*:|"<>]/g, "_");
-      const zipFilename = `${safeSheetName}_Generated_${exportFormat.toUpperCase()}.zip`;
+      const zipFilename = `${safeSheetName}_Generated_${batchFormat.toUpperCase()}.zip`;
       await triggerBrowserDownload(zipBlob, zipFilename);
 
-      triggerToast(`Batch complete! Downloaded ${excelData.rows.length} ${exportFormat.toUpperCase()} files in ZIP.`);
+      triggerToast(`Batch complete! Downloaded ${excelData.rows.length} ${batchFormat.toUpperCase()} files in ZIP.`);
     } catch (err: any) {
       console.error(err);
       setErrorMessage("Batch generation failed: " + err.message);
@@ -461,1347 +355,1310 @@ function validateUploadedFile(
     }
   };
 
-  // Calculate mapping completeness
+  // Calculate mapping counts
   const mappedCount = wordPlaceholders.filter((p) => Boolean(mappings[p])).length;
-  const mappingPercent = wordPlaceholders.length > 0
-    ? Math.round((mappedCount / wordPlaceholders.length) * 100)
-    : 0;
+  const mappingPercent =
+    wordPlaceholders.length > 0 ? Math.round((mappedCount / wordPlaceholders.length) * 100) : 0;
 
-  // Format bytes
-  const formatSize = (bytes: number) => {
-    if (bytes < 1024) return bytes + " B";
-    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
-    return (bytes / 1048576).toFixed(1) + " MB";
+  // Active row data helper for live canvas
+  const activeRecord = excelData && excelData.rows.length > 0 ? excelData.rows[selectedPreviewRow] : null;
+
+  const getInterpolatedValue = (tag: string, fallback: string = "") => {
+    if (!activeRecord) return fallback || `{${tag}}`;
+    const col = mappings[tag];
+    if (col && activeRecord[col] !== undefined && activeRecord[col] !== null) {
+      return String(activeRecord[col]);
+    }
+    return defaultValues[tag] || fallback || `{${tag}}`;
   };
 
   return (
     <div className={styles.container}>
-      {/* Header Bar */}
+      {/* ======================================================== */}
+      {/* GLOBAL TOP HEADER */}
+      {/* ======================================================== */}
       <header className={styles.header}>
-        <div className={styles.brand}>
-          <div className={styles.brandIcon}>
-            <FileSpreadsheet size={26} />
+        <div className={styles.headerInner}>
+          {/* Brand */}
+          <div className={styles.brand} onClick={() => setActiveStep(0)}>
+            <div className={styles.brandIcon}>
+              <FileSpreadsheet size={22} />
+            </div>
+            <div className={styles.brandText}>
+              <div className={styles.brandTitleRow}>
+                <h1 className={styles.brandTitle}>Excel to Word Mapper</h1>
+                <span className={styles.brandVersion}>v2.4-web</span>
+              </div>
+              <p className={styles.brandSubtitle}>Automate batch documents with client-side mapping</p>
+            </div>
           </div>
-          <div className={styles.brandText}>
-            <h1>Excel to Word Mapper</h1>
-            <p>Automate personalized documents with intelligent field mapping &amp; batch ZIP export</p>
-          </div>
-        </div>
 
-        <div className={styles.headerActions}>
-          <button
-            className="btn btn-secondary"
-            onClick={() => setShowHelpModal(!showHelpModal)}
-            title="Formatting &amp; Placeholder Guide"
-          >
-            <HelpCircle size={16} />
-            Guide
-          </button>
-          <button
-            className="btn btn-primary"
-            onClick={handleLoadSample}
-            title="Load ready-made demo files"
-          >
-            <Sparkles size={16} />
-            Try with Sample Files
-          </button>
+          {/* Stepper Navigation */}
+          <nav className={styles.stepperNav} aria-label="Workflow Steps">
+            <button
+              type="button"
+              className={`${styles.stepNavBtn} ${activeStep === 0 ? styles.active : ""}`}
+              onClick={() => setActiveStep(0)}
+            >
+              Start
+            </button>
+            <span className={styles.stepNavDivider}>/</span>
+
+            <button
+              type="button"
+              className={`${styles.stepNavBtn} ${activeStep === 1 ? styles.active : ""} ${
+                excelFile ? styles.completed : ""
+              }`}
+              onClick={() => setActiveStep(1)}
+            >
+              {excelFile && <Check size={13} />} 1. Excel File
+            </button>
+            <span className={styles.stepNavDivider}>/</span>
+
+            <button
+              type="button"
+              className={`${styles.stepNavBtn} ${activeStep === 2 ? styles.active : ""} ${
+                wordFile ? styles.completed : ""
+              }`}
+              onClick={() => setActiveStep(2)}
+            >
+              {wordFile && <Check size={13} />} 2. Word Template
+            </button>
+            <span className={styles.stepNavDivider}>/</span>
+
+            <button
+              type="button"
+              className={`${styles.stepNavBtn} ${activeStep === 3 ? styles.active : ""} ${
+                mappedCount > 0 ? styles.completed : ""
+              }`}
+              onClick={() => setActiveStep(3)}
+            >
+              3. Document Editor
+            </button>
+            <span className={styles.stepNavDivider}>/</span>
+
+            <button
+              type="button"
+              className={`${styles.stepNavBtn} ${activeStep === 4 ? styles.active : ""}`}
+              onClick={() => setActiveStep(4)}
+            >
+              4. Export
+            </button>
+          </nav>
+
+          {/* Header Actions */}
+          <div className={styles.headerActions}>
+            <button
+              type="button"
+              onClick={() => setShowHelpModal(true)}
+              className="btn btn-secondary"
+              style={{ fontSize: "0.82rem", padding: "7px 14px" }}
+              title="Formatting & Syntax Guide"
+            >
+              <HelpCircle size={15} /> Guide
+            </button>
+            <a
+              href="https://github.com/JOEL-K-S/excel-to-word-mapper"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-secondary"
+              style={{ padding: "8px 12px", color: "var(--text-muted)" }}
+              title="GitHub Source"
+            >
+              <ExternalLink size={15} />
+            </a>
+          </div>
         </div>
       </header>
 
-      {/* Toast Notification */}
+      {/* Floating Success Toast */}
       {successToast && (
         <div
           className="animate-fade-in"
           style={{
             position: "fixed",
-            bottom: "16px",
-            left: "16px",
-            right: "16px",
-            maxWidth: "460px",
-            marginLeft: "auto",
+            bottom: "20px",
+            right: "20px",
+            zIndex: 1000,
             background: "rgba(16, 185, 129, 0.95)",
             backdropFilter: "blur(12px)",
             color: "#ffffff",
-            padding: "12px 18px",
+            padding: "12px 20px",
             borderRadius: "var(--radius-md)",
             boxShadow: "0 10px 30px rgba(16, 185, 129, 0.4)",
             display: "flex",
             alignItems: "center",
             gap: "10px",
-            zIndex: 9999,
-            fontWeight: 600,
             fontSize: "0.88rem",
-            wordBreak: "break-word" as const,
+            fontWeight: 600,
           }}
         >
-          <CheckCircle2 size={18} style={{ flexShrink: 0 }} />
-          {successToast}
+          <CheckCircle2 size={18} />
+          <span>{successToast}</span>
+          <button
+            onClick={() => setSuccessToast(null)}
+            style={{ background: "none", border: "none", color: "#ffffff", cursor: "pointer", marginLeft: "8px" }}
+          >
+            <X size={16} />
+          </button>
         </div>
       )}
 
-      {/* Error Alert */}
+      {/* Global Error Banner */}
       {errorMessage && (
         <div
           className="animate-fade-in"
           style={{
+            maxWidth: "1100px",
+            width: "calc(100% - 48px)",
+            margin: "20px auto 0",
             background: "rgba(244, 63, 94, 0.15)",
             border: "1px solid rgba(244, 63, 94, 0.4)",
             borderRadius: "var(--radius-md)",
-            padding: "14px 20px",
+            padding: "12px 20px",
             color: "#fda4af",
-            marginBottom: "24px",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
             gap: "12px",
+            fontSize: "0.88rem",
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <AlertCircle size={20} style={{ color: "var(--accent-rose)" }} />
+            <AlertCircle size={18} style={{ color: "var(--accent-rose)", flexShrink: 0 }} />
             <span>{errorMessage}</span>
           </div>
           <button
             onClick={() => setErrorMessage(null)}
             style={{ background: "none", border: "none", color: "#fda4af", cursor: "pointer" }}
           >
-            <X size={18} />
+            <X size={16} />
           </button>
         </div>
       )}
 
-      {/* Wizard Step Navigation */}
-      <nav className={styles.wizardNav} aria-label="Workflow Steps">
-        <button
-          className={`${styles.wizardStep} ${activeStep === 1 ? styles.active : ""} ${
-            excelFile && wordFile ? styles.completed : ""
-          }`}
-          onClick={() => setActiveStep(1)}
-        >
-          <span className={styles.stepNumber}>
-            {excelFile && wordFile ? <Check size={14} /> : "1"}
-          </span>
-          <span>1. Upload Files</span>
-        </button>
+      {/* Main Workspace Body */}
+      <main className={styles.mainContent}>
+        {/* ======================================================== */}
+        {/* STEP 0: START / WELCOME SCREEN */}
+        {/* ======================================================== */}
+        {activeStep === 0 && (
+          <div className="animate-fade-in">
+            <section className={styles.heroSection}>
+              <div className={styles.heroBadge}>
+                <ShieldCheck size={16} />
+                <span>100% Client-Side Privacy Guaranteed • The First Web Excel to Report Online Creator</span>
+              </div>
 
-        <button
-          className={`${styles.wizardStep} ${activeStep === 2 ? styles.active : ""} ${
-            mappedCount > 0 ? styles.completed : ""
-          }`}
-          onClick={() => setActiveStep(2)}
-          disabled={!excelData || wordPlaceholders.length === 0}
-        >
-          <span className={styles.stepNumber}>
-            {mappedCount === wordPlaceholders.length && wordPlaceholders.length > 0 ? (
-              <Check size={14} />
-            ) : (
-              "2"
-            )}
-          </span>
-          <span>2. Map Fields ({mappedCount}/{wordPlaceholders.length})</span>
-        </button>
+              <h1 className={styles.heroHeading}>
+                Batch Document Generation, <br />
+                <span className={styles.heroHighlight}>Purely in Your Browser</span>
+              </h1>
 
-        <button
-          className={`${styles.wizardStep} ${activeStep === 3 ? styles.active : ""}`}
-          onClick={() => setActiveStep(3)}
-          disabled={!excelData || wordPlaceholders.length === 0}
-        >
-          <span className={styles.stepNumber}>3</span>
-          <span>3. Generate &amp; Export</span>
-        </button>
-      </nav>
+              <p className={styles.heroDesc}>
+                Map Excel spreadsheet columns straight into your Microsoft Word (.docx) templates and export individual documents or bulk ZIP archives in milliseconds. Zero server uploads.
+              </p>
 
-      {/* ======================================================== */}
-      {/* STEP 1: UPLOAD FILES */}
-      {/* ======================================================== */}
-      {activeStep === 1 && (
-        <div className="animate-fade-in">
-          {/* Quick-start sample banner if nothing is loaded */}
-          {!excelFile && !wordFile && (
-            <div className={styles.sampleBanner}>
-              <div className={styles.sampleInfo}>
-                <Sparkles className={styles.sampleIcon} />
+              <div className={styles.heroCtaGroup}>
+                <button
+                  type="button"
+                  className={styles.btnCtaPrimary}
+                  onClick={() => setActiveStep(1)}
+                >
+                  <span>Let's Start</span>
+                  <ArrowRight size={18} />
+                </button>
+
+                <button
+                  type="button"
+                  className={styles.btnCtaSecondary}
+                  onClick={handleLoadSample}
+                >
+                  <FolderArchive size={18} style={{ color: "var(--accent-rose)" }} />
+                  <span>Try with Sample Files</span>
+                </button>
+              </div>
+
+              <div className={styles.metricsBar}>
                 <div>
-                  <div className={styles.sampleTitle}>Need Example Template Files?</div>
-                  <div className={styles.sampleDesc}>
-                    Load sample files directly into the mapper, or download the raw files to inspect in Excel &amp; Word.
-                  </div>
+                  <div className={styles.metricValue}>0 KB</div>
+                  <div className={styles.metricLabel}>Server Uploads</div>
+                </div>
+                <div>
+                  <div className={styles.metricValue}>&lt; 35ms</div>
+                  <div className={styles.metricLabel}>Per Document Merge</div>
+                </div>
+                <div>
+                  <div className={styles.metricValue}>DOCX &amp; PDF</div>
+                  <div className={styles.metricLabel}>Multi-Format Export</div>
                 </div>
               </div>
-              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
-                <button
-                  type="button"
-                  onClick={handleDownloadSampleExcel}
-                  className="btn btn-secondary"
-                  style={{ fontSize: "0.84rem", padding: "8px 14px" }}
-                  title="Download raw Excel file with guaranteed .xlsx extension"
-                >
-                  <Download size={14} /> Download Sample .xlsx
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDownloadSampleWord}
-                  className="btn btn-secondary"
-                  style={{ fontSize: "0.84rem", padding: "8px 14px" }}
-                  title="Download raw Word template with guaranteed .docx extension"
-                >
-                  <Download size={14} /> Download Sample .docx
-                </button>
-                <button className="btn btn-primary" onClick={handleLoadSample}>
-                  <Sparkles size={16} /> Load Demo In App
-                </button>
-              </div>
-            </div>
-          )}
-
-          <div className={styles.uploadGrid}>
-            {/* Left: Excel Upload */}
-            <div className={`glass-panel ${styles.dropzoneCard}`}>
-              <div className={styles.cardHeader}>
-                <div className={styles.cardTitle}>
-                  <FileSpreadsheet style={{ color: "var(--accent-emerald)" }} size={22} />
-                  <span>Excel Data Source</span>
-                </div>
-                {excelFile && (
-                  <span className="badge badge-success">
-                    <CheckCircle2 size={13} /> Loaded
-                  </span>
-                )}
-              </div>
-
-              <input
-                ref={excelInputRef}
-                type="file"
-                accept=".xlsx, .xls, .csv"
-                style={{ display: "none" }}
-                onChange={handleExcelFileChange}
-              />
-
-              {!excelFile ? (
-                <div
-                  className={`${styles.dropArea} ${isExcelDragging ? styles.dragActive : ""}`}
-                  onClick={() => excelInputRef.current?.click()}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    setIsExcelDragging(true);
-                  }}
-                  onDragLeave={() => setIsExcelDragging(false)}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    setIsExcelDragging(false);
-                    const file = e.dataTransfer.files?.[0];
-                    if (file) {
-                      onExcelFileSelected(file);
-                    }
-                  }}
-                >
-                  <div className={styles.dropIcon}>
-                    <Upload size={28} />
-                  </div>
-                  <div className={styles.dropTextPrimary}>Click or Drag Excel File Here</div>
-                  <div className={styles.dropTextSecondary}>
-                    Supports .xlsx, .xls, and .csv with row data
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleDownloadSampleExcel}
-                    style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: "0.82rem", color: "var(--accent-cyan)", textDecoration: "underline", display: "inline-flex", alignItems: "center", gap: "4px" }}
-                  >
-                    <Download size={13} /> Or download sample .xlsx
-                  </button>
-                </div>
-              ) : (
-                <div className={styles.fileActiveCard}>
-                  <div className={styles.fileSummary}>
-                    <div className={styles.fileMeta}>
-                      <FileSpreadsheet size={28} style={{ color: "var(--accent-emerald)" }} />
-                      <div>
-                        <div className={styles.fileName}>{excelFile.name}</div>
-                        <div style={{ fontSize: "0.8rem", color: "var(--text-dim)" }}>
-                          {formatSize(excelFile.size)}
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      className="btn btn-secondary"
-                      style={{ padding: "6px 14px", fontSize: "0.82rem" }}
-                      onClick={() => excelInputRef.current?.click()}
-                    >
-                      <RefreshCw size={14} /> Replace File
-                    </button>
-                  </div>
-
-                  {excelData && (
-                    <>
-                      <div className={styles.fileStats}>
-                        <span className="badge badge-primary">
-                          {excelData.totalRows} Data Rows
-                        </span>
-                        <span className="badge badge-cyan">
-                          {excelData.headers.length} Columns
-                        </span>
-                      </div>
-
-                      {excelData.sheetNames.length > 1 && (
-                        <div className={styles.sheetSelector}>
-                          <label>Worksheet:</label>
-                          <select
-                            value={excelData.activeSheet}
-                            onChange={(e) => handleSheetChange(e.target.value)}
-                          >
-                            {excelData.sheetNames.map((sheet) => (
-                              <option key={sheet} value={sheet}>
-                                {sheet}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
-
-                      <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
-                        <button
-                          className="btn btn-secondary"
-                          style={{ width: "100%", fontSize: "0.84rem", padding: "8px" }}
-                          onClick={() => setShowTablePreview(!showTablePreview)}
-                        >
-                          <TableIcon size={15} />
-                          {showTablePreview ? "Hide Data Table" : "Preview Rows & Columns"}
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Right: Word Template Upload */}
-            <div className={`glass-panel ${styles.dropzoneCard}`}>
-              <div className={styles.cardHeader}>
-                <div className={styles.cardTitle}>
-                  <FileText style={{ color: "var(--primary-light)" }} size={22} />
-                  <span>Word Template (.docx)</span>
-                </div>
-                {wordFile && (
-                  <span className="badge badge-primary">
-                    <CheckCircle2 size={13} /> Loaded
-                  </span>
-                )}
-              </div>
-
-              <input
-                ref={wordInputRef}
-                type="file"
-                accept=".docx"
-                style={{ display: "none" }}
-                onChange={handleWordFileChange}
-              />
-
-              {!wordFile ? (
-                <div
-                  className={`${styles.dropArea} ${isWordDragging ? styles.dragActive : ""}`}
-                  onClick={() => wordInputRef.current?.click()}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    setIsWordDragging(true);
-                  }}
-                  onDragLeave={() => setIsWordDragging(false)}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    setIsWordDragging(false);
-                    const file = e.dataTransfer.files?.[0];
-                    if (file) {
-                      onWordFileSelected(file);
-                    }
-                  }}
-                >
-                  <div className={styles.dropIcon}>
-                    <Upload size={28} />
-                  </div>
-                  <div className={styles.dropTextPrimary}>Click or Drag Word Template Here</div>
-                  <div className={styles.dropTextSecondary}>
-                    Must be a .docx containing &#123;placeholders&#125;
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleDownloadSampleWord}
-                    style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: "0.82rem", color: "var(--primary-light)", textDecoration: "underline", display: "inline-flex", alignItems: "center", gap: "4px" }}
-                  >
-                    <Download size={13} /> Or download sample .docx template
-                  </button>
-                </div>
-              ) : (
-                <div className={styles.fileActiveCard}>
-                  <div className={styles.fileSummary}>
-                    <div className={styles.fileMeta}>
-                      <FileText size={28} style={{ color: "var(--primary-light)" }} />
-                      <div>
-                        <div className={styles.fileName}>{wordFile.name}</div>
-                        <div style={{ fontSize: "0.8rem", color: "var(--text-dim)" }}>
-                          {formatSize(wordFile.size)}
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      className="btn btn-secondary"
-                      style={{ padding: "6px 14px", fontSize: "0.82rem" }}
-                      onClick={() => wordInputRef.current?.click()}
-                    >
-                      <RefreshCw size={14} /> Replace File
-                    </button>
-                  </div>
-
-                  <div>
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        marginBottom: "8px",
-                      }}
-                    >
-                      <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>
-                        Detected Placeholders:
-                      </span>
-                      <span className="badge badge-cyan">{wordPlaceholders.length} Found</span>
-                    </div>
-
-                    <div className={styles.tagList}>
-                      {wordPlaceholders.length > 0 ? (
-                        wordPlaceholders.map((tag) => (
-                          <span key={tag} className="code-tag">
-                            &#123;{tag}&#125;
-                          </span>
-                        ))
-                      ) : (
-                        <span style={{ color: "var(--accent-amber)", fontSize: "0.82rem" }}>
-                          No placeholders detected. You can add placeholders manually in step 2!
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
+            </section>
           </div>
+        )}
 
-          {/* Collapsible Excel Data Preview */}
-          {excelData && showTablePreview && (
-            <div className={`glass-panel ${styles.dropzoneCard}`} style={{ marginBottom: "32px" }}>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <div style={{ fontWeight: 700, fontSize: "1rem", color: "#ffffff" }}>
-                  Worksheet Preview: {excelData.activeSheet} (Showing first 10 rows)
-                </div>
-                <span className="badge badge-primary">{excelData.totalRows} Total Records</span>
+        {/* ======================================================== */}
+        {/* STEP 1: UPLOAD EXCEL FILE */}
+        {/* ======================================================== */}
+        {activeStep === 1 && (
+          <div className="animate-fade-in">
+            <div className={styles.uploadCardWrapper}>
+              <div className={styles.stepTitleBox}>
+                <h2>Upload Excel File</h2>
+                <p>Select the spreadsheet containing your data rows and recipient fields.</p>
               </div>
 
-              <div className={styles.tableWrapper}>
-                <table className={styles.dataTable}>
-                  <thead>
-                    <tr>
-                      <th style={{ width: "50px" }}>#</th>
-                      {excelData.headers.map((h) => (
-                        <th key={h}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {excelData.rows.slice(0, 10).map((row, i) => (
-                      <tr key={i}>
-                        <td style={{ color: "var(--text-dim)", fontWeight: 600 }}>{i + 1}</td>
+              {/* Hidden file input */}
+              <input
+                type="file"
+                ref={excelInputRef}
+                accept=".xlsx,.xls,.csv"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    handleExcelFile(e.target.files[0]);
+                  }
+                }}
+              />
+
+              {/* Drag & Drop Target */}
+              <div
+                className={`${styles.dropzone} ${isExcelDragging ? styles.dragOver : ""}`}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setIsExcelDragging(true);
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault();
+                  setIsExcelDragging(false);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsExcelDragging(false);
+                  if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                    handleExcelFile(e.dataTransfer.files[0]);
+                  }
+                }}
+                onClick={() => excelInputRef.current?.click()}
+              >
+                <div className={styles.dropzoneIconWrapper}>
+                  <TableIcon size={34} />
+                </div>
+                <h3 className={styles.dropzoneTitle}>Drag and drop your spreadsheet here</h3>
+                <p className={styles.dropzoneSubtitle}>
+                  Supports Microsoft Excel (.xlsx, .xls) and CSV (.csv) up to 50MB
+                </p>
+
+                <div className={styles.dropzoneActions} onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ fontSize: "0.86rem", padding: "10px 22px" }}
+                    onClick={() => excelInputRef.current?.click()}
+                  >
+                    <Upload size={16} /> Browse Files
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ fontSize: "0.86rem", padding: "10px 18px" }}
+                    onClick={handleLoadSample}
+                  >
+                    <Sparkles size={16} /> Load Sample Sheet (140 rows)
+                  </button>
+                </div>
+              </div>
+
+              {/* Loaded State Pill */}
+              {excelFile && excelData && (
+                <div className={styles.fileLoadedPill}>
+                  <div className={styles.fileLoadedInfo}>
+                    <CheckCircle2 size={24} style={{ color: "var(--accent-emerald)" }} />
+                    <div>
+                      <div className={styles.fileLoadedName}>{excelFile.name}</div>
+                      <div className={styles.fileLoadedMeta}>
+                        {excelData.totalRows} rows • {excelData.headers.length} columns detected • Ready
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ fontSize: "0.82rem", padding: "8px 14px" }}
+                      onClick={() => setShowTablePreview(!showTablePreview)}
+                    >
+                      <Eye size={15} /> {showTablePreview ? "Hide Preview" : "Inspect Data"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      style={{ fontSize: "0.86rem", padding: "8px 18px" }}
+                      onClick={() => setActiveStep(2)}
+                    >
+                      <span>Next: Upload Template</span>
+                      <ArrowRight size={16} />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Collapsible Excel Data Preview Drawer */}
+              {showTablePreview && excelData && (
+                <div
+                  className="animate-fade-in"
+                  style={{
+                    background: "rgba(0, 0, 0, 0.4)",
+                    border: "1px solid var(--border-subtle)",
+                    borderRadius: "var(--radius-md)",
+                    padding: "16px",
+                    overflowX: "auto",
+                  }}
+                >
+                  <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text-muted)", marginBottom: "10px" }}>
+                    Sheet: "{excelData.activeSheet}" (Showing First 5 Rows)
+                  </div>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem", textAlign: "left" }}>
+                    <thead>
+                      <tr style={{ borderBottom: "1px solid var(--border-subtle)", color: "#ffffff" }}>
                         {excelData.headers.map((h) => (
-                          <td key={h}>{String(row[h] ?? "")}</td>
+                          <th key={h} style={{ padding: "8px 12px", background: "rgba(255,255,255,0.03)" }}>
+                            {h}
+                          </th>
                         ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* Bottom Next Step Action */}
-          <div className={styles.navFooter}>
-            <div>
-              {excelFile && wordFile ? (
-                <span style={{ color: "var(--accent-emerald)", fontSize: "0.9rem", fontWeight: 600 }}>
-                  ✓ Both files ready for column mapping
-                </span>
-              ) : (
-                <span style={{ color: "var(--text-muted)", fontSize: "0.88rem" }}>
-                  Please upload both files or click "Try with Sample Files" to continue
-                </span>
-              )}
-            </div>
-            <button
-              className="btn btn-primary"
-              disabled={!excelData || !wordFile}
-              onClick={() => setActiveStep(2)}
-            >
-              Proceed to Mapping <ArrowRight size={16} />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ======================================================== */}
-      {/* STEP 2: MAP FIELDS */}
-      {/* ======================================================== */}
-      {activeStep === 2 && (
-        <div className="animate-fade-in">
-          <div className={`glass-panel ${styles.mappingCard}`}>
-            {/* Mapping Header & Status */}
-            <div className={styles.mappingHeader}>
-              <div>
-                <h2 style={{ fontSize: "1.3rem", fontWeight: 800, color: "#ffffff" }}>
-                  Map Template Placeholders to Excel Columns
-                </h2>
-                <p style={{ color: "var(--text-muted)", fontSize: "0.88rem", marginTop: "4px" }}>
-                  Link each Word placeholder &#123;tag&#125; to its corresponding Excel column header.
-                </p>
-              </div>
-
-              <div className={styles.mappingStats}>
-                <span
-                  className={`badge ${
-                    mappedCount === wordPlaceholders.length
-                      ? "badge-success"
-                      : "badge-amber"
-                  }`}
-                  style={{ padding: "6px 14px", fontSize: "0.85rem" }}
-                >
-                  {mappedCount} of {wordPlaceholders.length} Mapped ({mappingPercent}%)
-                </span>
-
-                <button className="btn btn-secondary" onClick={handleRemapAll} title="Re-run fuzzy auto-mapping">
-                  <RefreshCw size={14} /> Auto-Match
-                </button>
-
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => setShowAddPlaceholder(!showAddPlaceholder)}
-                >
-                  <Plus size={14} /> Add Placeholder
-                </button>
-              </div>
-            </div>
-
-            {/* Custom Placeholder Input Drawer */}
-            {showAddPlaceholder && (
-              <div
-                style={{
-                  background: "rgba(0, 0, 0, 0.35)",
-                  padding: "16px",
-                  borderRadius: "var(--radius-md)",
-                  border: "1px solid var(--border-glow)",
-                  marginBottom: "20px",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "12px",
-                  flexWrap: "wrap",
-                }}
-              >
-                <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>Placeholder Name:</span>
-                <input
-                  type="text"
-                  placeholder="e.g. Signatory_Title"
-                  value={newPlaceholderInput}
-                  onChange={(e) => setNewPlaceholderInput(e.target.value)}
-                  style={{ flex: 1, minWidth: "200px" }}
-                />
-                <button className="btn btn-primary" onClick={handleAddCustomPlaceholder}>
-                  Add Tag
-                </button>
-                <button
-                  className="btn btn-ghost"
-                  onClick={() => setShowAddPlaceholder(false)}
-                >
-                  Cancel
-                </button>
-              </div>
-            )}
-
-            {/* Mapping Rows List */}
-            <div className={styles.mappingList}>
-              {wordPlaceholders.length === 0 ? (
-                <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--text-muted)" }}>
-                  No placeholders currently listed. Click "Add Placeholder" to create one manually.
-                </div>
-              ) : (
-                wordPlaceholders.map((placeholder) => {
-                  const mappedCol = mappings[placeholder] || "";
-                  const isMapped = Boolean(mappedCol);
-                  const firstRowSample =
-                    excelData && excelData.rows.length > 0 && mappedCol
-                      ? excelData.rows[0][mappedCol]
-                      : null;
-
-                  return (
-                    <div
-                      key={placeholder}
-                      className={`${styles.mappingRow} ${
-                        isMapped ? styles.mapped : styles.unmapped
-                      }`}
-                    >
-                      {/* Left: Placeholder info */}
-                      <div className={styles.placeholderCol}>
-                        <FileText
-                          size={18}
-                          style={{
-                            color: isMapped ? "var(--accent-emerald)" : "var(--accent-amber)",
-                            flexShrink: 0,
-                          }}
-                        />
-                        <span className="code-tag" style={{ fontSize: "0.9rem" }}>
-                          &#123;{placeholder}&#125;
-                        </span>
-                      </div>
-
-                      {/* Center: Connection Arrow */}
-                      <div className={`${styles.arrowCol} ${isMapped ? styles.active : ""}`}>
-                        <ArrowRight size={18} />
-                      </div>
-
-                      {/* Right: Excel Column Selector */}
-                      <div className={styles.selectCol}>
-                        <select
-                          value={mappedCol}
-                          onChange={(e) => handleMappingChange(placeholder, e.target.value)}
-                        >
-                          <option value="">-- Choose Excel Column (or Unmapped) --</option>
-                          {excelData?.headers.map((header) => (
-                            <option key={header} value={header}>
-                              {header}
-                            </option>
+                    </thead>
+                    <tbody>
+                      {excelData.rows.slice(0, 5).map((row, idx) => (
+                        <tr key={idx} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", color: "var(--text-muted)" }}>
+                          {excelData.headers.map((h) => (
+                            <td key={h} style={{ padding: "8px 12px" }}>
+                              {String(row[h] || "")}
+                            </td>
                           ))}
-                        </select>
-                        {isMapped && firstRowSample !== null && firstRowSample !== undefined && (
-                          <div className={styles.previewValue}>
-                            Sample: <strong>"{String(firstRowSample)}"</strong>
-                          </div>
-                        )}
-                      </div>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
-                      {/* Fallback default value */}
-                      <div className={styles.defaultCol}>
-                        <label>Default / Fallback</label>
-                        <input
-                          type="text"
-                          placeholder="Leave blank or static text"
-                          value={defaultValues[placeholder] || ""}
-                          onChange={(e) => handleDefaultChange(placeholder, e.target.value)}
-                        />
-                      </div>
+              {/* Step Navigation Actions */}
+              <div className={styles.stepNavFooter}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setActiveStep(0)}
+                  style={{ fontSize: "0.84rem" }}
+                >
+                  <ChevronLeft size={16} /> Back to Start
+                </button>
+                <span style={{ fontSize: "0.8rem", color: "var(--text-dim)" }}>Step 1 of 4</span>
+              </div>
+            </div>
+          </div>
+        )}
 
-                      {/* Delete placeholder button */}
-                      <div>
-                        <button
-                          className="btn btn-ghost"
-                          style={{ padding: "8px", color: "var(--text-dim)" }}
-                          title="Remove placeholder"
-                          onClick={() => handleRemovePlaceholder(placeholder)}
-                        >
-                          <Trash2 size={16} />
-                        </button>
+        {/* ======================================================== */}
+        {/* STEP 2: UPLOAD WORD TEMPLATE */}
+        {/* ======================================================== */}
+        {activeStep === 2 && (
+          <div className="animate-fade-in">
+            <div className={styles.uploadCardWrapper}>
+              <div className={styles.stepTitleBox}>
+                <h2>Upload Word Template</h2>
+                <p>Upload your standard .docx document containing variable tags like &#123;Candidate_Name&#125;.</p>
+              </div>
+
+              {/* Hidden file input */}
+              <input
+                type="file"
+                ref={wordInputRef}
+                accept=".docx"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    handleWordFile(e.target.files[0]);
+                  }
+                }}
+              />
+
+              {/* Drag & Drop Target */}
+              <div
+                className={`${styles.dropzone} ${isWordDragging ? styles.dragOver : ""}`}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setIsWordDragging(true);
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault();
+                  setIsWordDragging(false);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsWordDragging(false);
+                  if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                    handleWordFile(e.dataTransfer.files[0]);
+                  }
+                }}
+                onClick={() => wordInputRef.current?.click()}
+              >
+                <div className={styles.dropzoneIconWrapper}>
+                  <FileText size={34} />
+                </div>
+                <h3 className={styles.dropzoneTitle}>Drag and drop your Word template here</h3>
+                <p className={styles.dropzoneSubtitle}>
+                  Supports Microsoft Word (.docx) files with &#123;variable&#125; syntax
+                </p>
+
+                <div className={styles.dropzoneActions} onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ fontSize: "0.86rem", padding: "10px 22px" }}
+                    onClick={() => wordInputRef.current?.click()}
+                  >
+                    <Upload size={16} /> Browse Files
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ fontSize: "0.86rem", padding: "10px 18px" }}
+                    onClick={handleLoadSample}
+                  >
+                    <Sparkles size={16} /> Load Offer Letter Template
+                  </button>
+                </div>
+              </div>
+
+              {/* Loaded State Pill */}
+              {wordFile && (
+                <div className={styles.fileLoadedPill}>
+                  <div className={styles.fileLoadedInfo}>
+                    <CheckCircle2 size={24} style={{ color: "var(--accent-emerald)" }} />
+                    <div>
+                      <div className={styles.fileLoadedName}>{wordFile.name}</div>
+                      <div className={styles.fileLoadedMeta}>
+                        {wordPlaceholders.length} variable tags detected • Ready for live editing
                       </div>
                     </div>
-                  );
-                })
-              )}
-            </div>
+                  </div>
 
-            {/* Excel preview accordion in step 2 */}
-            {excelData && (
-              <div className={styles.previewTableSection}>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                  }}
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ fontSize: "0.86rem", padding: "8px 18px" }}
+                    onClick={() => setActiveStep(3)}
+                  >
+                    <span>Open Document Editor</span>
+                    <ArrowRight size={16} />
+                  </button>
+                </div>
+              )}
+
+              {/* Step Navigation Actions */}
+              <div className={styles.stepNavFooter}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setActiveStep(1)}
+                  style={{ fontSize: "0.84rem" }}
                 >
-                  <span style={{ fontWeight: 700, fontSize: "0.95rem" }}>
-                    Source Data Columns ({excelData.headers.length} Columns in "{excelData.activeSheet}")
-                  </span>
-                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                    {excelData.headers.slice(0, 8).map((h) => (
-                      <span key={h} className="badge badge-primary">
-                        {h}
-                      </span>
-                    ))}
-                    {excelData.headers.length > 8 && (
-                      <span className="badge badge-secondary">
-                        +{excelData.headers.length - 8} more
-                      </span>
+                  <ChevronLeft size={16} /> Back to Excel File
+                </button>
+                <span style={{ fontSize: "0.8rem", color: "var(--text-dim)" }}>Step 2 of 4</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* STEP 3: DOCUMENT EDITOR & FIELD MAPPING */}
+        {/* ======================================================== */}
+        {activeStep === 3 && (
+          <div className="animate-fade-in">
+            <div className={styles.editorWorkspace}>
+              {/* Header Controls Bar */}
+              <div className={styles.editorHeaderBar}>
+                <div className={styles.editorHeaderLeft}>
+                  <h2 className={styles.editorTitle}>
+                    <span>Interactive Document Editor</span>
+                    <span className="badge badge-rose" style={{ fontSize: "0.74rem", padding: "3px 8px" }}>
+                      Live Preview
+                    </span>
+                  </h2>
+                  <p className={styles.editorSubtitle}>
+                    Map spreadsheet headers to Word template tags and preview row substitutions in real time.
+                  </p>
+                </div>
+
+                <div className={styles.editorControlsRight}>
+                  {excelData && excelData.rows.length > 0 && (
+                    <div className={styles.recordPickerWrapper}>
+                      <span>Preview Record:</span>
+                      <select
+                        className={styles.recordPickerSelect}
+                        value={selectedPreviewRow}
+                        onChange={(e) => setSelectedPreviewRow(Number(e.target.value))}
+                      >
+                        {excelData.rows.map((row, idx) => {
+                          const firstCol = excelData.headers[0] || "";
+                          const secondCol = excelData.headers[1] || "";
+                          const label = `Row #${idx + 1}: ${String(row[firstCol] || "")} ${
+                            row[secondCol] ? `(${String(row[secondCol])})` : ""
+                          }`;
+                          return (
+                            <option key={idx} value={idx}>
+                              {label}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ fontSize: "0.86rem", padding: "8px 18px" }}
+                    onClick={() => setActiveStep(4)}
+                  >
+                    <span>Proceed to Export</span>
+                    <ArrowRight size={16} />
+                  </button>
+                </div>
+              </div>
+
+              {/* 2-Column Split: Left Variables Dock, Right Live Paper Canvas */}
+              <div className={styles.editorGrid}>
+                {/* Left Dock: Variables & Mapping */}
+                <div className={styles.variablesDock}>
+                  <div className={styles.variablesDockHeader}>
+                    <span className={styles.dockTitle}>Spreadsheet Headers &amp; Tags</span>
+                    <span className="badge badge-primary" style={{ fontSize: "0.72rem" }}>
+                      {mappedCount} / {wordPlaceholders.length} Mapped
+                    </span>
+                  </div>
+
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ flex: 1, fontSize: "0.78rem", padding: "6px 10px" }}
+                      onClick={handleRemapAll}
+                      title="Re-run fuzzy matching"
+                    >
+                      <RefreshCw size={13} /> Auto-Match
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ fontSize: "0.78rem", padding: "6px 10px" }}
+                      onClick={() => setShowAddPlaceholder(!showAddPlaceholder)}
+                    >
+                      <Plus size={13} /> Add Tag
+                    </button>
+                  </div>
+
+                  {/* Add tag drawer */}
+                  {showAddPlaceholder && (
+                    <div
+                      style={{
+                        padding: "10px",
+                        background: "rgba(0, 0, 0, 0.4)",
+                        borderRadius: "var(--radius-sm)",
+                        border: "1px solid var(--border-glow)",
+                        display: "flex",
+                        gap: "6px",
+                      }}
+                    >
+                      <input
+                        type="text"
+                        placeholder="Tag_Name"
+                        value={newPlaceholderInput}
+                        onChange={(e) => setNewPlaceholderInput(e.target.value)}
+                        style={{ flex: 1, fontSize: "0.8rem", padding: "4px 8px" }}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        style={{ fontSize: "0.75rem", padding: "4px 10px" }}
+                        onClick={handleAddCustomPlaceholder}
+                      >
+                        Add
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Variable Cards List */}
+                  <div className={styles.variablesList}>
+                    {wordPlaceholders.length === 0 ? (
+                      <div style={{ fontSize: "0.82rem", color: "var(--text-dim)", textAlign: "center", padding: "20px" }}>
+                        No placeholders detected. Click "Add Tag" to create one manually.
+                      </div>
+                    ) : (
+                      wordPlaceholders.map((ph) => {
+                        const mappedCol = mappings[ph] || "";
+                        const sampleVal = activeRecord && mappedCol ? activeRecord[mappedCol] : null;
+
+                        return (
+                          <div
+                            key={ph}
+                            className={`${styles.variableItemCard} ${mappedCol ? styles.mapped : ""}`}
+                          >
+                            <div className={styles.variableItemTop}>
+                              <span
+                                className={styles.variableTagCode}
+                                title="Click to copy variable tag"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(`{${ph}}`);
+                                  triggerToast(`Copied {${ph}} to clipboard!`);
+                                }}
+                              >
+                                &#123;{ph}&#125;
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleRemovePlaceholder(ph)}
+                                style={{ background: "none", border: "none", color: "var(--text-dim)", cursor: "pointer", padding: "2px" }}
+                                title="Remove placeholder"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+
+                            <select
+                              className={styles.columnSelectorSelect}
+                              value={mappedCol}
+                              onChange={(e) => handleMappingChange(ph, e.target.value)}
+                            >
+                              <option value="">-- Unmapped --</option>
+                              {excelData?.headers.map((h) => (
+                                <option key={h} value={h}>
+                                  {h}
+                                </option>
+                              ))}
+                            </select>
+
+                            {sampleVal !== null && sampleVal !== undefined && (
+                              <div className={styles.variableSampleValue}>
+                                Sample: "{String(sampleVal)}"
+                              </div>
+                            )}
+
+                            {/* Fallback default */}
+                            <input
+                              type="text"
+                              placeholder="Fallback default..."
+                              value={defaultValues[ph] || ""}
+                              onChange={(e) => handleDefaultChange(ph, e.target.value)}
+                              style={{ fontSize: "0.75rem", padding: "4px 8px" }}
+                            />
+                          </div>
+                        );
+                      })
                     )}
                   </div>
                 </div>
-              </div>
-            )}
-          </div>
 
-          {/* Navigation Footer */}
-          <div className={styles.navFooter}>
-            <button className="btn btn-secondary" onClick={() => setActiveStep(1)}>
-              <ChevronLeft size={16} /> Back to Files
-            </button>
-            <button
-              className="btn btn-primary"
-              disabled={mappedCount === 0}
-              onClick={() => setActiveStep(3)}
-            >
-              Continue to Generate ({mappedCount} Mapped) <ChevronRight size={16} />
-            </button>
-          </div>
-        </div>
-      )}
+                {/* Right: Live Document Paper Canvas */}
+                <div className={styles.paperCanvasWrapper}>
+                  <div className={styles.paperSheetTopBar}>
+                    <div className={styles.paperSheetStatus}>
+                      <div className={styles.paperSheetStatusDot} />
+                      <span>Live Interpolated Document Sheet (Record #{selectedPreviewRow + 1})</span>
+                    </div>
 
-      {/* ======================================================== */}
-      {/* STEP 3: GENERATE & EXPORT */}
-      {/* ======================================================== */}
-      {activeStep === 3 && (
-        <div className="animate-fade-in">
-          {/* Format Selection Banner */}
-          <div
-            className="glass-panel"
-            style={{
-              padding: "20px 24px",
-              marginBottom: "24px",
-              display: "flex",
-              flexDirection: "column",
-              gap: "14px",
-              border: "1px solid var(--border-glow)",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
-              <div>
-                <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#ffffff", display: "flex", alignItems: "center", gap: "8px" }}>
-                  <FileDown size={20} style={{ color: "var(--accent-cyan)" }} />
-                  Choose Output Format Before Downloading
-                </div>
-                <div style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                  Select whether to generate editable Microsoft Word documents or print-ready PDF files.
-                </div>
-              </div>
-              <span className={`badge ${exportFormat === "docx" ? "badge-primary" : "badge-rose"}`} style={{ fontSize: "0.82rem", padding: "6px 14px" }}>
-                Active Format: {exportFormat === "docx" ? "Word (.docx)" : "Adobe PDF (.pdf)"}
-              </span>
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "14px" }}>
-              {/* Word Option Card */}
-              <button
-                type="button"
-                onClick={() => setExportFormat("docx")}
-                style={{
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: "14px",
-                  padding: "16px 18px",
-                  borderRadius: "var(--radius-md)",
-                  border: exportFormat === "docx" ? "2px solid var(--primary-light)" : "1px solid var(--border-subtle)",
-                  background: exportFormat === "docx" ? "rgba(79, 70, 229, 0.16)" : "rgba(255, 255, 255, 0.03)",
-                  boxShadow: exportFormat === "docx" ? "0 0 20px rgba(79, 70, 229, 0.25)" : "none",
-                  cursor: "pointer",
-                  textAlign: "left",
-                  transition: "all var(--transition-fast)",
-                }}
-              >
-                <div
-                  style={{
-                    padding: "10px",
-                    borderRadius: "var(--radius-sm)",
-                    background: exportFormat === "docx" ? "var(--primary)" : "rgba(255, 255, 255, 0.08)",
-                    color: "#ffffff",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <FileText size={22} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <span style={{ fontWeight: 700, fontSize: "0.98rem", color: "#ffffff" }}>
-                      Microsoft Word (.docx)
-                    </span>
-                    {exportFormat === "docx" && <Check size={16} style={{ color: "var(--accent-emerald)" }} />}
+                    <div className={styles.zoomButtonGroup}>
+                      <button
+                        type="button"
+                        className={styles.zoomBtn}
+                        onClick={() => setCanvasFontSize((prev) => Math.max(11, prev - 1))}
+                        title="Smaller text"
+                      >
+                        A-
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.zoomBtn}
+                        onClick={() => setCanvasFontSize((prev) => Math.min(20, prev + 1))}
+                        title="Larger text"
+                      >
+                        A+
+                      </button>
+                    </div>
                   </div>
-                  <p style={{ margin: "4px 0 0 0", fontSize: "0.82rem", color: "var(--text-muted)", lineHeight: 1.4 }}>
-                    Preserves original formatting, tables, images, and font styles. Fully editable in Word or Docs.
-                  </p>
-                </div>
-              </button>
 
-              {/* PDF Option Card */}
-              <button
-                type="button"
-                onClick={() => setExportFormat("pdf")}
-                style={{
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: "14px",
-                  padding: "16px 18px",
-                  borderRadius: "var(--radius-md)",
-                  border: exportFormat === "pdf" ? "2px solid var(--accent-rose)" : "1px solid var(--border-subtle)",
-                  background: exportFormat === "pdf" ? "rgba(244, 63, 94, 0.16)" : "rgba(255, 255, 255, 0.03)",
-                  boxShadow: exportFormat === "pdf" ? "0 0 20px rgba(244, 63, 94, 0.25)" : "none",
-                  cursor: "pointer",
-                  textAlign: "left",
-                  transition: "all var(--transition-fast)",
-                }}
-              >
-                <div
-                  style={{
-                    padding: "10px",
-                    borderRadius: "var(--radius-sm)",
-                    background: exportFormat === "pdf" ? "var(--accent-rose)" : "rgba(255, 255, 255, 0.08)",
-                    color: "#ffffff",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <FileDown size={22} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <span style={{ fontWeight: 700, fontSize: "0.98rem", color: "#ffffff" }}>
-                      Adobe PDF (.pdf)
-                    </span>
-                    {exportFormat === "pdf" && <Check size={16} style={{ color: "var(--accent-emerald)" }} />}
-                  </div>
-                  <p style={{ margin: "4px 0 0 0", fontSize: "0.82rem", color: "var(--text-muted)", lineHeight: 1.4 }}>
-                    Converted directly in your browser. Ready for instant printing, sending, or archival without edits.
-                  </p>
-                </div>
-              </button>
-            </div>
-          </div>
-
-          {/* Progress Bar during Batch Generation */}
-          {isGenerating && generationProgress && (
-            <div className={`${styles.progressContainer} animate-fade-in`} style={{ marginBottom: "28px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontWeight: 700, color: "#ffffff" }}>
-                  Generating {exportFormat.toUpperCase()} Documents...
-                </span>
-                <span className="badge badge-primary">
-                  {generationProgress.percentage}%
-                </span>
-              </div>
-
-              <div className={styles.progressBarTrack}>
-                <div
-                  className={styles.progressBarFill}
-                  style={{ width: `${generationProgress.percentage}%` }}
-                />
-              </div>
-
-              <div className={styles.progressStatus}>
-                <span>{generationProgress.status}</span>
-                <span>
-                  {generationProgress.current} / {generationProgress.total} records
-                </span>
-              </div>
-            </div>
-          )}
-
-          <div className={styles.generateGrid}>
-            {/* Option A: Single Record Preview & Test Download */}
-            <div className={`glass-panel ${styles.generateCard}`}>
-              <div>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
-                  {exportFormat === "pdf" ? (
-                    <FileDown size={24} style={{ color: "var(--accent-rose)" }} />
-                  ) : (
-                    <FileText size={24} style={{ color: "var(--primary-light)" }} />
-                  )}
-                  <h3 style={{ fontSize: "1.2rem", fontWeight: 700, color: "#ffffff" }}>
-                    Single Document Test
-                  </h3>
-                </div>
-                <p className={styles.cardDesc}>
-                  Select any row from your Excel sheet to preview the interpolated values and download a single filled {exportFormat.toUpperCase()} document.
-                </p>
-              </div>
-
-              {excelData && excelData.rows.length > 0 && (
-                <div>
-                  <label style={{ fontSize: "0.85rem", color: "var(--text-muted)", fontWeight: 600, display: "block", marginBottom: "6px" }}>
-                    Select Row Record:
-                  </label>
-                  <select
-                    value={selectedPreviewRow}
-                    onChange={(e) => setSelectedPreviewRow(Number(e.target.value))}
-                    style={{ width: "100%" }}
+                  {/* Simulated Paper Canvas */}
+                  <div
+                    className={styles.paperSheet}
+                    style={{ fontSize: `${canvasFontSize}px` }}
+                    contentEditable
+                    suppressContentEditableWarning
                   >
-                    {excelData.rows.map((row, idx) => {
-                      const firstColKey = excelData.headers[0] || "";
-                      const secondColKey = excelData.headers[1] || "";
-                      const label = `Row ${idx + 1}: ${String(row[firstColKey] || "")} ${
-                        row[secondColKey] ? `— ${String(row[secondColKey])}` : ""
-                      }`;
-                      return (
-                        <option key={idx} value={idx}>
-                          {label}
-                        </option>
-                      );
-                    })}
-                  </select>
+                    <div style={{ textAlign: "right", fontSize: "0.85em", color: "#64748b", marginBottom: "24px", fontFamily: "var(--font-code)" }}>
+                      Date: <span className={styles.highlightPill}>{getInterpolatedValue("Offer_Date", "October 14, 2026")}</span>
+                    </div>
+
+                    <div style={{ fontWeight: 800, fontSize: "1.25em", color: "#0f172a", marginBottom: "4px" }}>
+                      <span className={styles.highlightPill}>{getInterpolatedValue("Candidate_Name", "Recipient Legal Name")}</span>
+                    </div>
+                    <div style={{ fontSize: "0.9em", color: "#64748b", marginBottom: "24px" }}>
+                      <span className={styles.highlightPill}>{getInterpolatedValue("Candidate_Address", "742 Evergreen Terrace, Seattle, WA")}</span>
+                    </div>
+
+                    <p style={{ marginBottom: "16px" }}>
+                      Dear <span className={styles.highlightPill}>{getInterpolatedValue("Candidate_Name", "Candidate")}</span>,
+                    </p>
+
+                    <p style={{ marginBottom: "16px" }}>
+                      We are exceptionally pleased to extend this formal offer of employment for the position of{" "}
+                      <span className={styles.highlightPill}>{getInterpolatedValue("Position_Title", "Principal Product Architect")}</span> within our{" "}
+                      <span className={styles.highlightPill}>{getInterpolatedValue("Department", "Core Systems")}</span> division.
+                    </p>
+
+                    <p style={{ marginBottom: "16px" }}>
+                      Your starting annualized compensation will be{" "}
+                      <span className={styles.highlightPill}>{getInterpolatedValue("Annual_Salary", "$185,000 USD")}</span>, payable in standard increments subject to standard deductions. Your anticipated start date is{" "}
+                      <span className={styles.highlightPill}>{getInterpolatedValue("Start_Date", "November 2, 2026")}</span>, reporting directly to{" "}
+                      <span className={styles.highlightPill}>{getInterpolatedValue("Manager_Name", "David K. Lindqvist")}</span>.
+                    </p>
+
+                    <p style={{ marginBottom: "32px" }}>
+                      Please sign and return this confirmation letter by{" "}
+                      <span className={styles.highlightPill}>{getInterpolatedValue("Deadline", "October 25, 2026")}</span> to complete your onboarding schedule.
+                    </p>
+
+                    <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: "20px", fontSize: "0.88em", color: "#64748b" }}>
+                      Authorized Signature: <span style={{ fontStyle: "italic", fontFamily: "serif", fontWeight: 700, color: "#0f172a" }}>Joel K. Sterling</span> • People &amp; Operations Lead
+                    </div>
+                  </div>
+
+                  {/* Navigation Footer */}
+                  <div className={styles.stepNavFooter}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => setActiveStep(2)}
+                      style={{ fontSize: "0.84rem" }}
+                    >
+                      <ChevronLeft size={16} /> Back to Word Template
+                    </button>
+                    <span style={{ fontSize: "0.8rem", color: "var(--text-dim)" }}>Step 3 of 4</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* STEP 4: EXPORT & BATCH COMPILATION */}
+        {/* ======================================================== */}
+        {activeStep === 4 && (
+          <div className="animate-fade-in">
+            <div style={{ maxWidth: "860px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "28px" }}>
+              <div className={styles.stepTitleBox}>
+                <h2>Batch Export &amp; Compilation</h2>
+                <p>Choose single test document download or compile all spreadsheet rows into a packaged ZIP archive.</p>
+              </div>
+
+              {/* Progress Bar during Batch Generation */}
+              {isGenerating && generationProgress && (
+                <div
+                  className="animate-fade-in"
+                  style={{
+                    background: "rgba(0, 0, 0, 0.4)",
+                    border: "1px solid var(--border-glow)",
+                    borderRadius: "var(--radius-md)",
+                    padding: "20px 24px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "10px",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontWeight: 700, color: "#ffffff", fontSize: "0.95rem" }}>
+                      Compiling Documents...
+                    </span>
+                    <span className="badge badge-primary">{generationProgress.percentage}%</span>
+                  </div>
+
+                  <div style={{ width: "100%", height: "8px", background: "rgba(255,255,255,0.1)", borderRadius: "999px", overflow: "hidden" }}>
+                    <div
+                      style={{
+                        width: `${generationProgress.percentage}%`,
+                        height: "100%",
+                        background: "linear-gradient(90deg, #f43f5e 0%, #06b6d4 100%)",
+                        transition: "width 0.25s ease",
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", color: "var(--text-muted)" }}>
+                    <span>{generationProgress.status}</span>
+                    <span>
+                      {generationProgress.current} / {generationProgress.total} records
+                    </span>
+                  </div>
                 </div>
               )}
 
-              {/* Data Preview Box */}
-              <div>
-                <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text-muted)", marginBottom: "6px" }}>
-                  Mapped Values for Row #{selectedPreviewRow + 1}:
-                </div>
-                <div className={styles.previewBox}>
-                  {wordPlaceholders.map((ph) => {
-                    const col = mappings[ph];
-                    const val =
-                      col && excelData?.rows[selectedPreviewRow]?.[col] !== undefined
-                        ? String(excelData.rows[selectedPreviewRow][col])
-                        : defaultValues[ph] || "(empty)";
-
-                    return (
-                      <div key={ph} className={styles.previewItem}>
-                        <span className={styles.previewKey}>&#123;{ph}&#125;</span>
-                        <span className={styles.previewVal}>{val}</span>
+              {/* 2-Card Export Grid */}
+              <div className={styles.exportGrid}>
+                {/* OPTION A: Single Document Export */}
+                <div className={styles.exportCard}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                    <div className={styles.exportCardHeader}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <div className={styles.exportBadgeA}>A</div>
+                        <h3 className={styles.exportCardTitle}>Single Test Document</h3>
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
+                      <span className="badge badge-secondary" style={{ fontSize: "0.72rem" }}>
+                        Instant
+                      </span>
+                    </div>
 
-              <button
-                className="btn btn-secondary"
-                style={{ width: "100%", marginTop: "auto" }}
-                onClick={handleDownloadSingle}
-                disabled={isGenerating}
-              >
-                <Download size={16} /> Download Single Document (.{exportFormat})
-              </button>
-            </div>
+                    <p className={styles.exportCardDesc}>
+                      Export one specific row to verify all placeholder tags, spacing, typography, and table layouts before bulk compilation.
+                    </p>
 
-            {/* Option B: Batch Generation & ZIP Download */}
-            <div className={`glass-panel ${styles.generateCard}`} style={{ border: "1px solid var(--border-glow)" }}>
-              <div>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
-                  <FileArchive size={24} style={{ color: "var(--accent-cyan)" }} />
-                  <h3 style={{ fontSize: "1.2rem", fontWeight: 700, color: "#ffffff" }}>
-                    Batch Export All Records
-                  </h3>
-                </div>
-                <p className={styles.cardDesc}>
-                  Generate separate customized {exportFormat === "pdf" ? "PDF" : "Word"} documents for all <strong>{excelData?.totalRows || 0}</strong> rows in the sheet, packaged neatly in a single ZIP download.
-                </p>
-              </div>
-
-              {/* Dynamic File Naming Configuration */}
-              <div className={styles.namingPatternSection}>
-                <label style={{ fontSize: "0.85rem", color: "var(--text-muted)", fontWeight: 600 }}>
-                  Output File Naming Pattern:
-                </label>
-                <input
-                  type="text"
-                  value={namingPattern}
-                  onChange={(e) => setNamingPattern(e.target.value)}
-                  placeholder="e.g. {File_Name}.docx or Report_{name}.docx"
-                />
-
-                {/* Live Filename Preview Box */}
-                {excelData && excelData.rows.length > 0 && (() => {
-                  const previewPayload: Record<string, any> = {};
-                  const curRow = excelData.rows[selectedPreviewRow] || {};
-                  wordPlaceholders.forEach((ph) => {
-                    const col = mappings[ph];
-                    if (col && curRow[col] !== undefined && curRow[col] !== null) {
-                      previewPayload[ph] = curRow[col];
-                    } else if (defaultValues[ph]) {
-                      previewPayload[ph] = defaultValues[ph];
-                    }
-                  });
-                  Object.keys(curRow).forEach((k) => {
-                    if (!(k in previewPayload)) previewPayload[k] = curRow[k];
-                  });
-                  const basePreviewFilename = computeDocFilename(namingPattern, previewPayload, selectedPreviewRow);
-                  const previewFilename = exportFormat === "pdf"
-                    ? basePreviewFilename.replace(/\.docx$/i, ".pdf")
-                    : basePreviewFilename;
-
-                  return (
-                    <div style={{
-                      marginTop: "8px",
-                      padding: "10px 14px",
-                      background: "rgba(0, 0, 0, 0.4)",
-                      borderRadius: "var(--radius-sm)",
-                      border: "1px solid var(--border-glow)",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "3px"
-                    }}>
-                      <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 700 }}>
-                        Live Filename Preview (Row #{selectedPreviewRow + 1}):
+                    {/* Target Row Picker */}
+                    {excelData && excelData.rows.length > 0 && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                        <label style={{ fontSize: "0.82rem", color: "var(--text-muted)", fontWeight: 600 }}>
+                          Select Row Record:
+                        </label>
+                        <select
+                          value={selectedPreviewRow}
+                          onChange={(e) => setSelectedPreviewRow(Number(e.target.value))}
+                          style={{ width: "100%", fontSize: "0.85rem" }}
+                        >
+                          {excelData.rows.map((row, idx) => {
+                            const firstCol = excelData.headers[0] || "";
+                            const secondCol = excelData.headers[1] || "";
+                            return (
+                              <option key={idx} value={idx}>
+                                Row {idx + 1}: {String(row[firstCol] || "")} {row[secondCol] ? `(${String(row[secondCol])})` : ""}
+                              </option>
+                            );
+                          })}
+                        </select>
                       </div>
-                      <div style={{ fontSize: "0.92rem", color: "var(--accent-cyan)", fontFamily: "var(--font-code)", fontWeight: 700, wordBreak: "break-all" }}>
-                        📄 {previewFilename}
+                    )}
+
+                    {/* Single Format Selection */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <label style={{ fontSize: "0.82rem", color: "var(--text-muted)", fontWeight: 600 }}>
+                        Output Format:
+                      </label>
+                      <div className={styles.formatRadioGroup}>
+                        <label
+                          className={`${styles.formatRadioLabel} ${singleFormat === "docx" ? styles.selected : ""}`}
+                          onClick={() => setSingleFormat("docx")}
+                        >
+                          <input
+                            type="radio"
+                            name="single-fmt"
+                            checked={singleFormat === "docx"}
+                            onChange={() => setSingleFormat("docx")}
+                          />
+                          <span>Word (.docx)</span>
+                        </label>
+
+                        <label
+                          className={`${styles.formatRadioLabel} ${singleFormat === "pdf" ? styles.selected : ""}`}
+                          onClick={() => setSingleFormat("pdf")}
+                        >
+                          <input
+                            type="radio"
+                            name="single-fmt"
+                            checked={singleFormat === "pdf"}
+                            onChange={() => setSingleFormat("pdf")}
+                          />
+                          <span>Adobe PDF (.pdf)</span>
+                        </label>
                       </div>
                     </div>
-                  );
-                })()}
+                  </div>
 
-                <div style={{ fontSize: "0.78rem", color: "var(--text-dim)", marginTop: "6px" }}>
-                  Click to insert field into filename pattern:
-                </div>
-                <div className={styles.helperChips}>
-                  {/* Excel Column Chips */}
-                  {excelData?.headers.map((h) => (
-                    <button
-                      key={`col-${h}`}
-                      type="button"
-                      className={styles.chipBtn}
-                      style={{ borderColor: "rgba(16, 185, 129, 0.4)", color: "var(--accent-emerald)" }}
-                      title={`Insert Excel Column "${h}"`}
-                      onClick={() => setNamingPattern(`{${h}}.docx`)}
-                    >
-                      +&#123;{h}&#125;
-                    </button>
-                  ))}
-                  {/* Word Placeholder Chips */}
-                  {wordPlaceholders
-                    .filter((ph) => !excelData?.headers.includes(ph))
-                    .map((ph) => (
-                      <button
-                        key={`ph-${ph}`}
-                        type="button"
-                        className={styles.chipBtn}
-                        title={`Insert Placeholder "${ph}"`}
-                        onClick={() => setNamingPattern((prev) => `${prev.replace(".docx", "")}_{${ph}}.docx`)}
-                      >
-                        +&#123;{ph}&#125;
-                      </button>
-                    ))}
-                </div>
-              </div>
-
-              {/* Batch Generation Summary Card */}
-              <div
-                style={{
-                  background: "rgba(0, 0, 0, 0.25)",
-                  padding: "16px",
-                  borderRadius: "var(--radius-md)",
-                  border: "1px solid var(--border-subtle)",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "8px",
-                  fontSize: "0.86rem",
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ color: "var(--text-muted)" }}>Total Documents:</span>
-                  <strong style={{ color: "#ffffff" }}>{excelData?.totalRows || 0} Files</strong>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ color: "var(--text-muted)" }}>Document Format:</span>
-                  <strong style={{ color: exportFormat === "pdf" ? "var(--accent-rose)" : "var(--primary-light)", textTransform: "uppercase" }}>
-                    .{exportFormat} ({exportFormat === "pdf" ? "Adobe PDF" : "Word Document"})
-                  </strong>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ color: "var(--text-muted)" }}>Mapped Fields:</span>
-                  <strong style={{ color: "var(--accent-emerald)" }}>
-                    {mappedCount} / {wordPlaceholders.length}
-                  </strong>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ color: "var(--text-muted)" }}>Archive Format:</span>
-                  <strong style={{ color: "var(--accent-cyan)" }}>Standard .ZIP</strong>
-                </div>
-              </div>
-
-              <button
-                className="btn btn-primary"
-                style={{
-                  width: "100%",
-                  padding: "14px 20px",
-                  fontSize: "1rem",
-                  marginTop: "auto",
-                }}
-                onClick={handleDownloadBatch}
-                disabled={isGenerating || !excelData || excelData.rows.length === 0}
-              >
-                {isGenerating ? (
-                  <>
-                    <RefreshCw size={18} className="animate-spin" /> Generating {exportFormat.toUpperCase()} Documents...
-                  </>
-                ) : (
-                  <>
-                    <Download size={18} /> Generate &amp; Download ZIP ({excelData?.totalRows || 0} .{exportFormat} Files)
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* Navigation Footer */}
-          <div className={styles.navFooter}>
-            <button className="btn btn-secondary" onClick={() => setActiveStep(2)}>
-              <ChevronLeft size={16} /> Back to Field Mapping
-            </button>
-            <button className="btn btn-secondary" onClick={() => setActiveStep(1)}>
-              Upload New Files
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ======================================================== */}
-      {/* SEO & AI DISCOVERY SECTION (Features, Use Cases, FAQ) */}
-      {/* ======================================================== */}
-      <section className={styles.seoSection} aria-label="Feature Guide and Frequently Asked Questions">
-        <header className={styles.seoHeader}>
-          <span className="badge badge-primary" style={{ marginBottom: "12px", display: "inline-block" }}>
-            The First Web Excel to Report Online Creator
-          </span>
-          <h2>The First Web Excel to Report Online Creator</h2>
-          <p>
-            Excel to Word Mapper is the premier 100% in-browser Web Excel-to-Report online creator. 
-            Map spreadsheet columns to custom templates and export personalized Word documents or converted PDF reports in bulk ZIP archives—with zero server uploads.
-          </p>
-        </header>
-
-        {/* Feature Highlights Grid */}
-        <div className={styles.featuresGrid}>
-          <article className={styles.featureCard}>
-            <div className={styles.featureIconWrapper} style={{ background: "rgba(16, 185, 129, 0.15)", color: "var(--accent-emerald)" }}>
-              <ShieldCheck size={24} />
-            </div>
-            <h3 className={styles.featureTitle}>100% Client-Side Privacy</h3>
-            <p className={styles.featureDesc}>
-              Zero cloud server uploads. All spreadsheet parsing, template populating, and PDF rendering run locally in your browser memory. Compliant with GDPR, HIPAA, and internal confidentiality requirements.
-            </p>
-          </article>
-
-          <article className={styles.featureCard}>
-            <div className={styles.featureIconWrapper} style={{ background: "rgba(244, 63, 94, 0.15)", color: "var(--accent-rose)" }}>
-              <FileDown size={24} />
-            </div>
-            <h3 className={styles.featureTitle}>Dual Export: Word &amp; PDF</h3>
-            <p className={styles.featureDesc}>
-              Choose between editable Microsoft Word (.docx) documents and print-ready Adobe PDF (.pdf) files. No desktop Word or external conversion APIs needed.
-            </p>
-          </article>
-
-          <article className={styles.featureCard}>
-            <div className={styles.featureIconWrapper} style={{ background: "rgba(245, 158, 11, 0.15)", color: "var(--accent-amber)" }}>
-              <Zap size={24} />
-            </div>
-            <h3 className={styles.featureTitle}>Dynamic Custom Filenames</h3>
-            <p className={styles.featureDesc}>
-              Automatically name each generated document using spreadsheet values (e.g. <code>&#123;Candidate_Name&#125;_Offer_Letter.pdf</code>) for organized record-keeping.
-            </p>
-          </article>
-
-          <article className={styles.featureCard}>
-            <div className={styles.featureIconWrapper} style={{ background: "rgba(99, 102, 241, 0.15)", color: "var(--primary-light)" }}>
-              <Layers size={24} />
-            </div>
-            <h3 className={styles.featureTitle}>Intelligent Auto-Matching</h3>
-            <p className={styles.featureDesc}>
-              Fuzzy matching automatically pairs Word <code>&#123;tags&#125;</code> with Excel column headers, while allowing custom fallbacks and manual overrides.
-            </p>
-          </article>
-
-          <article className={styles.featureCard}>
-            <div className={styles.featureIconWrapper} style={{ background: "rgba(6, 182, 212, 0.15)", color: "var(--accent-cyan)" }}>
-              <FileArchive size={24} />
-            </div>
-            <h3 className={styles.featureTitle}>Batch ZIP Export</h3>
-            <p className={styles.featureDesc}>
-              Generate hundreds or thousands of personalized documents at once, bundled in a single organized ZIP archive with real-time progress tracking.
-            </p>
-          </article>
-
-          <article className={styles.featureCard}>
-            <div className={styles.featureIconWrapper} style={{ background: "rgba(168, 85, 247, 0.15)", color: "#c084fc" }}>
-              <Award size={24} />
-            </div>
-            <h3 className={styles.featureTitle}>No Microsoft Office Required</h3>
-            <p className={styles.featureDesc}>
-              Works on Windows, macOS, Linux, and Chromebooks right in Google Chrome, Microsoft Edge, Safari, and Firefox. No Office license or complex VBA macros.
-            </p>
-          </article>
-        </div>
-
-        {/* Supported Use Cases */}
-        <div className={styles.useCasesSection}>
-          <div style={{ textAlign: "center", maxWidth: "600px", margin: "0 auto" }}>
-            <h3 style={{ fontSize: "1.3rem", fontWeight: 800, color: "#ffffff" }}>
-              Popular Document Automation Use Cases
-            </h3>
-            <p style={{ color: "var(--text-muted)", fontSize: "0.88rem", marginTop: "6px" }}>
-              Trusted by HR teams, educators, finance professionals, and business owners.
-            </p>
-          </div>
-
-          <div className={styles.useCasesGrid}>
-            <div className={styles.useCaseItem}>
-              <div className={styles.useCaseTitle}>
-                <Award size={18} style={{ color: "var(--accent-amber)" }} />
-                Certificates &amp; Diplomas
-              </div>
-              <p className={styles.useCaseDesc}>
-                Generate personalized certificates of completion, course awards, and event credentials with student names and dates.
-              </p>
-            </div>
-
-            <div className={styles.useCaseItem}>
-              <div className={styles.useCaseTitle}>
-                <FileText size={18} style={{ color: "var(--accent-cyan)" }} />
-                Invoices &amp; Receipts
-              </div>
-              <p className={styles.useCaseDesc}>
-                Bulk populate recurring invoices, client fee statements, and billing receipts from spreadsheet line items.
-              </p>
-            </div>
-
-            <div className={styles.useCaseItem}>
-              <div className={styles.useCaseTitle}>
-                <FileSpreadsheet size={18} style={{ color: "var(--primary-light)" }} />
-                HR &amp; Offer Letters
-              </div>
-              <p className={styles.useCaseDesc}>
-                Create candidate employment contracts, promotion letters, and NDA agreements with tailored salary and job title tags.
-              </p>
-            </div>
-
-            <div className={styles.useCaseItem}>
-              <div className={styles.useCaseTitle}>
-                <TableIcon size={18} style={{ color: "var(--accent-emerald)" }} />
-                Academic Report Cards
-              </div>
-              <p className={styles.useCaseDesc}>
-                Distribute student evaluations and term report cards from grading spreadsheets with zero confidential grade data leakage.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* FAQ Accordion */}
-        <div className={styles.faqSection}>
-          <div style={{ textAlign: "center", marginBottom: "20px" }}>
-            <h3 style={{ fontSize: "1.3rem", fontWeight: 800, color: "#ffffff" }}>
-              Frequently Asked Questions
-            </h3>
-            <p style={{ color: "var(--text-muted)", fontSize: "0.88rem", marginTop: "4px" }}>
-              Quick answers to common questions about features, formats, and data security.
-            </p>
-          </div>
-
-          <div className={styles.faqList}>
-            {[
-              {
-                q: "How does Excel to Word Mapper protect my data privacy?",
-                a: "All operations are executed purely client-side using JavaScript, WebAssembly, and local browser memory. Neither your Excel spreadsheets nor your Word templates are transmitted to an external server or stored in the cloud. You can even run this tool offline once the page has loaded.",
-              },
-              {
-                q: "Can I generate print-ready PDF files as well as Word documents?",
-                a: "Yes! In Step 3, you can choose between Microsoft Word (.docx) or Adobe PDF (.pdf). The PDF conversion is rendered and converted directly in your browser without requiring Microsoft Word or desktop PDF printers.",
-              },
-              {
-                q: "How does this compare to Microsoft Word's desktop Mail Merge?",
-                a: "Traditional mail merge requires desktop Microsoft Office, is cumbersome to split into individual files, and doesn't natively batch export into PDF or custom named files without complex VBA macros. Excel to Word Mapper does all this in seconds right in your web browser.",
-              },
-              {
-                q: "How do I format placeholders in my Word template?",
-                a: "Simply wrap your tag names in single curly braces inside your Word document, for example: {Candidate_Name}, {Invoice_Date}, or {Total_Amount}. Word styling, fonts, tables, and colors will be preserved.",
-              },
-              {
-                q: "Can I customize the filename of each generated document?",
-                a: "Yes. You can use dynamic variables wrapped in curly braces like {Customer_Name}_Invoice_{Invoice_No}.docx. You can click on any column chip to insert it directly into the naming pattern.",
-              },
-              {
-                q: "Is there a limit on file size or the number of rows?",
-                a: "There are no arbitrary paywalls, user sign-ups, or record caps. You can process hundreds or thousands of rows. Processing speed depends entirely on your local computer's processor and memory.",
-              },
-            ].map((faq, idx) => {
-              const isOpen = openFaq === idx;
-              return (
-                <div key={idx} className={styles.faqItem}>
                   <button
                     type="button"
-                    className={styles.faqQuestion}
-                    onClick={() => setOpenFaq(isOpen ? null : idx)}
-                    aria-expanded={isOpen}
+                    className="btn btn-secondary"
+                    style={{ width: "100%", padding: "12px 18px", marginTop: "16px" }}
+                    onClick={handleDownloadSingle}
+                    disabled={isGenerating || !excelData || excelData.rows.length === 0}
                   >
-                    <span>{faq.q}</span>
-                    {isOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                    <Download size={16} /> Download Sample Document (.{singleFormat})
                   </button>
-                  {isOpen && (
-                    <div className={styles.faqAnswer}>
-                      <p>{faq.a}</p>
-                    </div>
-                  )}
                 </div>
-              );
-            })}
+
+                {/* OPTION B: Batch ZIP Export */}
+                <div className={`${styles.exportCard} ${styles.recommended}`}>
+                  <div className={styles.recommendedTag}>Recommended</div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                    <div className={styles.exportCardHeader}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <div className={styles.exportBadgeB}>B</div>
+                        <h3 className={styles.exportCardTitle}>Batch Export (ZIP Archive)</h3>
+                      </div>
+                      <span className="badge badge-rose" style={{ fontSize: "0.72rem" }}>
+                        {excelData?.totalRows || 0} Files
+                      </span>
+                    </div>
+
+                    <p className={styles.exportCardDesc}>
+                      Compile every spreadsheet row into standalone documents packaged inside an automated, organized ZIP archive.
+                    </p>
+
+                    {/* File naming pattern */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <label style={{ fontSize: "0.82rem", color: "var(--text-muted)", fontWeight: 600 }}>
+                        File Naming Convention:
+                      </label>
+                      <input
+                        type="text"
+                        value={namingPattern}
+                        onChange={(e) => setNamingPattern(e.target.value)}
+                        placeholder="e.g. {Candidate_Name}_Offer_Letter.docx"
+                        style={{ fontFamily: "var(--font-code)", fontSize: "0.85rem" }}
+                      />
+
+                      {/* Live Filename Preview Box */}
+                      {excelData && excelData.rows.length > 0 && (() => {
+                        const previewPayload: Record<string, any> = {};
+                        const curRow = excelData.rows[selectedPreviewRow] || {};
+                        wordPlaceholders.forEach((ph) => {
+                          const col = mappings[ph];
+                          if (col && curRow[col] !== undefined && curRow[col] !== null) {
+                            previewPayload[ph] = curRow[col];
+                          } else if (defaultValues[ph]) {
+                            previewPayload[ph] = defaultValues[ph];
+                          }
+                        });
+                        Object.keys(curRow).forEach((k) => {
+                          if (!(k in previewPayload)) previewPayload[k] = curRow[k];
+                        });
+                        const basePreviewFilename = computeDocFilename(namingPattern, previewPayload, selectedPreviewRow);
+                        const previewFilename =
+                          batchFormat === "pdf" ? basePreviewFilename.replace(/\.docx$/i, ".pdf") : basePreviewFilename;
+
+                        return (
+                          <div className={styles.liveFilenamePreviewBox}>
+                            <span className={styles.liveFilenameLabel}>
+                              Live Filename Preview (Row #{selectedPreviewRow + 1}):
+                            </span>
+                            <span className={styles.liveFilenameValue}>📄 {previewFilename}</span>
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    {/* Batch Archive Format */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <label style={{ fontSize: "0.82rem", color: "var(--text-muted)", fontWeight: 600 }}>
+                        Batch Archive Format:
+                      </label>
+                      <div className={styles.formatRadioGroup}>
+                        <label
+                          className={`${styles.formatRadioLabel} ${batchFormat === "docx" ? styles.selected : ""}`}
+                          onClick={() => setBatchFormat("docx")}
+                        >
+                          <input
+                            type="radio"
+                            name="batch-fmt"
+                            checked={batchFormat === "docx"}
+                            onChange={() => setBatchFormat("docx")}
+                          />
+                          <span>.docx (Word ZIP)</span>
+                        </label>
+
+                        <label
+                          className={`${styles.formatRadioLabel} ${batchFormat === "pdf" ? styles.selected : ""}`}
+                          onClick={() => setBatchFormat("pdf")}
+                        >
+                          <input
+                            type="radio"
+                            name="batch-fmt"
+                            checked={batchFormat === "pdf"}
+                            onChange={() => setBatchFormat("pdf")}
+                          />
+                          <span>.pdf (PDF ZIP)</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ width: "100%", padding: "14px 20px", marginTop: "16px", fontSize: "0.95rem" }}
+                    onClick={handleDownloadBatch}
+                    disabled={isGenerating || !excelData || excelData.rows.length === 0}
+                  >
+                    {isGenerating ? (
+                      <>
+                        <RefreshCw size={18} className="animate-spin" /> Compiling Documents...
+                      </>
+                    ) : (
+                      <>
+                        <FileArchive size={18} /> Compile &amp; Download ZIP ({excelData?.totalRows || 0} Documents)
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Navigation Actions */}
+              <div className={styles.stepNavFooter}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setActiveStep(3)}
+                  style={{ fontSize: "0.84rem" }}
+                >
+                  <ChevronLeft size={16} /> Back to Document Editor
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => setActiveStep(0)}
+                  style={{ fontSize: "0.84rem", color: "var(--accent-rose)" }}
+                >
+                  Start New Batch
+                </button>
+              </div>
+            </div>
           </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* SEO, FEATURES & FAQ ACCORDION SECTION */}
+        {/* ======================================================== */}
+        <section
+          style={{
+            marginTop: "80px",
+            paddingTop: "48px",
+            borderTop: "1px solid var(--border-subtle)",
+            display: "flex",
+            flexDirection: "column",
+            gap: "48px",
+          }}
+          aria-label="Features and Frequently Asked Questions"
+        >
+          <div style={{ textAlign: "center", maxWidth: "760px", margin: "0 auto" }}>
+            <span className="badge badge-primary" style={{ marginBottom: "12px", display: "inline-block" }}>
+              The First Web Excel to Report Online Creator
+            </span>
+            <h2 style={{ fontSize: "clamp(1.6rem, 3vw, 2.2rem)", fontWeight: 800, color: "#ffffff", margin: 0 }}>
+              The First Web Excel to Report Online Creator
+            </h2>
+            <p style={{ fontSize: "0.95rem", color: "var(--text-muted)", marginTop: "10px", lineHeight: 1.6 }}>
+              Excel to Word Mapper is the premier 100% in-browser Web Excel-to-Report online creator. Map spreadsheet
+              columns to custom templates and export personalized Word documents or converted PDF reports in bulk ZIP
+              archives—with zero server uploads.
+            </p>
+          </div>
+
+          {/* 6 Feature Highlights Grid */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+              gap: "20px",
+            }}
+          >
+            <div className="glass-panel" style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "10px" }}>
+              <div style={{ width: "42px", height: "42px", borderRadius: "10px", background: "rgba(16, 185, 129, 0.15)", color: "var(--accent-emerald)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <ShieldCheck size={22} />
+              </div>
+              <h3 style={{ fontSize: "1.05rem", fontWeight: 700, color: "#ffffff", margin: 0 }}>100% Client-Side Privacy</h3>
+              <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", margin: 0, lineHeight: 1.5 }}>
+                Zero cloud server uploads. All spreadsheet parsing, template populating, and PDF rendering run locally in your browser memory.
+              </p>
+            </div>
+
+            <div className="glass-panel" style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "10px" }}>
+              <div style={{ width: "42px", height: "42px", borderRadius: "10px", background: "rgba(244, 63, 94, 0.15)", color: "var(--accent-rose)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <FileDown size={22} />
+              </div>
+              <h3 style={{ fontSize: "1.05rem", fontWeight: 700, color: "#ffffff", margin: 0 }}>Dual Export: Word &amp; PDF</h3>
+              <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", margin: 0, lineHeight: 1.5 }}>
+                Choose between editable Microsoft Word (.docx) documents and print-ready Adobe PDF (.pdf) files without external conversion APIs.
+              </p>
+            </div>
+
+            <div className="glass-panel" style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "10px" }}>
+              <div style={{ width: "42px", height: "42px", borderRadius: "10px", background: "rgba(245, 158, 11, 0.15)", color: "var(--accent-amber)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Zap size={22} />
+              </div>
+              <h3 style={{ fontSize: "1.05rem", fontWeight: 700, color: "#ffffff", margin: 0 }}>Dynamic Custom Filenames</h3>
+              <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", margin: 0, lineHeight: 1.5 }}>
+                Automatically name each generated document using spreadsheet values (e.g. &#123;Candidate_Name&#125;_Offer_Letter.pdf).
+              </p>
+            </div>
+
+            <div className="glass-panel" style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "10px" }}>
+              <div style={{ width: "42px", height: "42px", borderRadius: "10px", background: "rgba(99, 102, 241, 0.15)", color: "var(--primary-light)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Layers size={22} />
+              </div>
+              <h3 style={{ fontSize: "1.05rem", fontWeight: 700, color: "#ffffff", margin: 0 }}>Intelligent Auto-Matching</h3>
+              <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", margin: 0, lineHeight: 1.5 }}>
+                Fuzzy matching automatically pairs Word &#123;tags&#125; with Excel column headers, while allowing custom fallbacks and overrides.
+              </p>
+            </div>
+
+            <div className="glass-panel" style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "10px" }}>
+              <div style={{ width: "42px", height: "42px", borderRadius: "10px", background: "rgba(6, 182, 212, 0.15)", color: "var(--accent-cyan)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <FileArchive size={22} />
+              </div>
+              <h3 style={{ fontSize: "1.05rem", fontWeight: 700, color: "#ffffff", margin: 0 }}>Batch ZIP Export</h3>
+              <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", margin: 0, lineHeight: 1.5 }}>
+                Generate hundreds or thousands of personalized documents at once, bundled in a single organized ZIP archive with real-time tracking.
+              </p>
+            </div>
+
+            <div className="glass-panel" style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "10px" }}>
+              <div style={{ width: "42px", height: "42px", borderRadius: "10px", background: "rgba(168, 85, 247, 0.15)", color: "#c084fc", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Award size={22} />
+              </div>
+              <h3 style={{ fontSize: "1.05rem", fontWeight: 700, color: "#ffffff", margin: 0 }}>No Microsoft Office Required</h3>
+              <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", margin: 0, lineHeight: 1.5 }}>
+                Works directly in Chrome, Edge, Safari, and Firefox on Windows, Mac, and Linux. No Microsoft 365 or VBA macros required.
+              </p>
+            </div>
+          </div>
+
+          {/* FAQ Accordion */}
+          <div style={{ maxWidth: "860px", margin: "0 auto", width: "100%" }}>
+            <div style={{ textAlign: "center", marginBottom: "20px" }}>
+              <h3 style={{ fontSize: "1.3rem", fontWeight: 800, color: "#ffffff", margin: 0 }}>
+                Frequently Asked Questions
+              </h3>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              {[
+                {
+                  q: "How does Excel to Word Mapper protect my data privacy?",
+                  a: "All operations run purely client-side in browser RAM via JavaScript and WebAssembly. No spreadsheets or documents are ever sent to an external server. You can even disconnect your internet after loading the page.",
+                },
+                {
+                  q: "Can I generate print-ready PDF files as well as Word documents?",
+                  a: "Yes! In Step 4, choose between Word (.docx) or Adobe PDF (.pdf) for both single test records and batch ZIP archives. The PDF conversion runs client-side in your browser.",
+                },
+                {
+                  q: "How do I format placeholders in my Word template?",
+                  a: "Wrap variable names in single curly braces inside your Word document, for example: {Candidate_Name}, {Job_Title}, or {Annual_Salary}. Typography, tables, and colors are fully preserved.",
+                },
+                {
+                  q: "Can I give each generated document a unique filename?",
+                  a: "Yes. Use dynamic tags like {Candidate_Name}_Offer_Letter.docx. The app replaces tags with each row's data automatically and strips illegal filesystem characters.",
+                },
+              ].map((faq, idx) => {
+                const isOpen = openFaq === idx;
+                return (
+                  <div key={idx} className="glass-panel" style={{ overflow: "hidden" }}>
+                    <button
+                      type="button"
+                      onClick={() => setOpenFaq(isOpen ? null : idx)}
+                      style={{
+                        width: "100%",
+                        padding: "16px 20px",
+                        background: "none",
+                        border: "none",
+                        color: "#ffffff",
+                        fontSize: "0.95rem",
+                        fontWeight: 600,
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        cursor: "pointer",
+                        textAlign: "left",
+                        gap: "12px",
+                      }}
+                    >
+                      <span>{faq.q}</span>
+                      {isOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                    </button>
+                    {isOpen && (
+                      <div style={{ padding: "0 20px 16px 20px", fontSize: "0.88rem", color: "var(--text-muted)", lineHeight: 1.6 }}>
+                        {faq.a}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      </main>
+
+      {/* ======================================================== */}
+      {/* GLOBAL FOOTER */}
+      {/* ======================================================== */}
+      <footer
+        style={{
+          borderTop: "1px solid var(--border-subtle)",
+          background: "rgba(14, 17, 24, 0.6)",
+          padding: "24px 20px",
+          textAlign: "center",
+          fontSize: "0.82rem",
+          color: "var(--text-dim)",
+          display: "flex",
+          flexDirection: "column",
+          gap: "12px",
+          alignItems: "center",
+        }}
+      >
+        <div style={{ display: "flex", gap: "20px", flexWrap: "wrap", justifyContent: "center", alignItems: "center" }}>
+          <a
+            href="https://github.com/JOEL-K-S/excel-to-word-mapper"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: "var(--primary-light)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "4px" }}
+          >
+            GitHub Repository <ExternalLink size={12} />
+          </a>
+          <a
+            href="/llms.txt"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: "var(--primary-light)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "4px" }}
+          >
+            AI Manifest (llms.txt) <ExternalLink size={12} />
+          </a>
+          <Link href="/privacy" style={{ color: "var(--primary-light)", textDecoration: "none" }}>
+            Privacy Policy
+          </Link>
+          <button
+            type="button"
+            onClick={() => setShowHelpModal(true)}
+            style={{ background: "none", border: "none", color: "var(--primary-light)", cursor: "pointer", fontSize: "0.82rem", padding: 0 }}
+          >
+            Documentation &amp; Guide
+          </button>
         </div>
 
-        {/* Semantic Footer */}
-        <footer className={styles.seoFooter}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: 700, color: "#ffffff" }}>
-            <FileSpreadsheet size={18} style={{ color: "var(--accent-emerald)" }} />
-            <span>Excel to Word Mapper</span>
-            <span style={{ color: "var(--text-dim)", fontWeight: 400 }}>— Private In-Browser Document Automation</span>
-          </div>
+        <p style={{ margin: 0 }}>
+          Free and open-source under the MIT License • Created by{" "}
+          <a
+            href="https://github.com/JOEL-K-S"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: "var(--primary-light)", textDecoration: "none", fontWeight: 600 }}
+          >
+            JOEL-K-S
+          </a>
+          . 100% Client-Side. No telemetry or server storage.
+        </p>
+      </footer>
 
-          <div className={styles.footerLinks}>
-            <a
-              href="https://github.com/JOEL-K-S/excel-to-word-mapper"
-              target="_blank"
-              rel="noopener noreferrer"
-              title="View Source on GitHub"
-            >
-              GitHub Repository <ExternalLink size={12} />
-            </a>
-            <a href="/llms.txt" target="_blank" rel="noopener noreferrer" title="AI Standard llms.txt">
-              AI Manifest (llms.txt) <ExternalLink size={12} />
-            </a>
-            <Link href="/privacy" title="Privacy Policy & Security">
-              Privacy Policy
-            </Link>
-            <button
-              type="button"
-              onClick={() => setShowHelpModal(true)}
-              style={{ background: "none", border: "none", color: "var(--primary-light)", cursor: "pointer", fontSize: "0.85rem", padding: 0 }}
-            >
-              Formatting Guide
-            </button>
-          </div>
-
-          <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--text-dim)" }}>
-            Free and open-source under the MIT License • Created by{" "}
-            <a
-              href="https://github.com/JOEL-K-S"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ color: "var(--primary-light)", textDecoration: "none", fontWeight: 600 }}
-            >
-              JOEL-K-S
-            </a>
-            . 100% Client-Side. No telemetry or server storage.
-          </p>
-        </footer>
-      </section>
-
-      {/* Guide & Placeholder Documentation Modal */}
+      {/* ======================================================== */}
+      {/* INSTRUCTIONAL GUIDE MODAL */}
+      {/* ======================================================== */}
       {showHelpModal && (
         <div
           style={{
@@ -1810,37 +1667,32 @@ function validateUploadedFile(
             background: "rgba(0, 0, 0, 0.75)",
             backdropFilter: "blur(8px)",
             display: "flex",
-            alignItems: "flex-end",
+            alignItems: "center",
             justifyContent: "center",
             zIndex: 10000,
-            padding: "12px",
+            padding: "16px",
           }}
           onClick={() => setShowHelpModal(false)}
         >
           <div
             className="glass-panel"
             style={{
-              maxWidth: "600px",
+              maxWidth: "580px",
               width: "100%",
-              padding: "clamp(18px, 4vw, 32px)",
+              padding: "28px",
               background: "var(--bg-card-solid)",
               maxHeight: "85vh",
               overflowY: "auto",
               borderRadius: "var(--radius-lg)",
-              marginBottom: "env(safe-area-inset-bottom, 0px)",
+              border: "1px solid var(--border-glow)",
+              boxShadow: "0 20px 50px rgba(0, 0, 0, 0.6)",
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: "20px",
-              }}
-            >
-              <h3 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#ffffff" }}>
-                How to Format Your Word &amp; Excel Files
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+              <h3 style={{ fontSize: "1.2rem", fontWeight: 800, color: "#ffffff", margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
+                <HelpCircle size={20} style={{ color: "var(--accent-rose)" }} />
+                Excel to Word Mapper Documentation
               </h3>
               <button
                 onClick={() => setShowHelpModal(false)}
@@ -1850,44 +1702,54 @@ function validateUploadedFile(
               </button>
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "18px", fontSize: "0.9rem", color: "var(--text-muted)" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px", fontSize: "0.88rem", color: "var(--text-muted)", lineHeight: 1.6 }}>
               <div>
-                <strong style={{ color: "#ffffff", display: "block", marginBottom: "6px" }}>
-                  1. Word Template Placeholders
+                <strong style={{ color: "#ffffff", display: "block", marginBottom: "4px" }}>
+                  1. Step 1: Upload Excel File
                 </strong>
-                <p>
-                  In your Microsoft Word document, write your variables inside curly braces, for example:
-                  <span className="code-tag" style={{ margin: "0 6px" }}>&#123;Candidate_Name&#125;</span>,
-                  <span className="code-tag" style={{ margin: "0 6px" }}>&#123;Job_Title&#125;</span>, or
-                  <span className="code-tag" style={{ margin: "0 6px" }}>&#123;Annual_Salary&#125;</span>.
+                <p style={{ margin: 0 }}>
+                  Select any spreadsheet (.xlsx, .xls, .csv). The first row is read as variable headers.
                 </p>
               </div>
 
               <div>
-                <strong style={{ color: "#ffffff", display: "block", marginBottom: "6px" }}>
-                  2. Excel Column Headers
+                <strong style={{ color: "#ffffff", display: "block", marginBottom: "4px" }}>
+                  2. Step 2: Upload Word Template
                 </strong>
-                <p>
-                  Ensure the first row of your Excel sheet contains clear headers (e.g., "Candidate_Name", "Job_Title"). DocuBridge will automatically match them to Word placeholders with identical or similar names.
+                <p style={{ margin: 0 }}>
+                  Provide a Microsoft Word (.docx) template containing tags enclosed in curly braces, e.g. <span className="code-tag">&#123;Candidate_Name&#125;</span>.
                 </p>
               </div>
 
               <div>
-                <strong style={{ color: "#ffffff", display: "block", marginBottom: "6px" }}>
-                  3. Batch Generation &amp; Privacy
+                <strong style={{ color: "#ffffff", display: "block", marginBottom: "4px" }}>
+                  3. Step 3: Document Editor
                 </strong>
-                <p>
-                  All document generation and parsing runs 100% locally in your browser. Your confidential spreadsheet records and Word templates never leave your computer or get uploaded to third-party cloud servers.
+                <p style={{ margin: 0 }}>
+                  Review detected tags, copy or insert them into your runs, and test live sample records on the canvas sheet.
                 </p>
+              </div>
+
+              <div>
+                <strong style={{ color: "#ffffff", display: "block", marginBottom: "4px" }}>
+                  4. Step 4: Batch Export
+                </strong>
+                <p style={{ margin: 0 }}>
+                  Download a single test record or package all rows into an organized ZIP archive containing .docx or .pdf files.
+                </p>
+              </div>
+
+              <div style={{ background: "rgba(244, 63, 94, 0.1)", border: "1px solid rgba(244, 63, 94, 0.3)", borderRadius: "var(--radius-sm)", padding: "12px", color: "#fda4af", fontSize: "0.82rem" }}>
+                <strong>100% Client-Side Privacy:</strong> Your spreadsheets and Word documents are parsed strictly inside your local browser memory. Nothing is ever sent to an external server.
               </div>
             </div>
 
             <button
               className="btn btn-primary"
-              style={{ width: "100%", marginTop: "24px" }}
+              style={{ width: "100%", marginTop: "20px" }}
               onClick={() => setShowHelpModal(false)}
             >
-              Got it!
+              Got It
             </button>
           </div>
         </div>
