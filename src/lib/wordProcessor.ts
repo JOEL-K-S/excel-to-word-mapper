@@ -116,11 +116,45 @@ export function extractTextFromDocx(arrayBuffer: ArrayBuffer): string {
     xml = xml.replace(/«\s*([a-zA-Z0-9_\-\.\s#^/]+)\s*»/g, "{$1}");
     xml = xml.replace(/&laquo;\s*([a-zA-Z0-9_\-\.\s#^/]+)\s*&raquo;/g, "{$1}");
 
-    // Replace paragraph endings with newlines
-    xml = xml.replace(/<\/w:p>/g, "\n\n");
-    // Strip XML tags
-    const plain = xml.replace(/<[^>]+>/g, "").trim();
-    return plain;
+    // Convert breaks to newlines
+    xml = xml.replace(/<w:br[^>]*\/>/g, "\n");
+    xml = xml.replace(/<w:cr[^>]*\/>/g, "\n");
+    xml = xml.replace(/<w:tab[^>]*\/>/g, "\t");
+
+    // Extract text paragraph by paragraph
+    const pRegex = /<w:p\b[^>]*>([\s\S]*?)<\/w:p>/g;
+    const paragraphs: string[] = [];
+    let pMatch: RegExpExecArray | null;
+
+    while ((pMatch = pRegex.exec(xml)) !== null) {
+      const pXml = pMatch[1];
+      // Extract all <w:t> content in this paragraph
+      const tRegex = /<w:t\b[^>]*>([\s\S]*?)<\/w:t>/g;
+      let pText = "";
+      let tMatch: RegExpExecArray | null;
+      while ((tMatch = tRegex.exec(pXml)) !== null) {
+        pText += tMatch[1];
+      }
+      // Decode XML entities
+      pText = pText
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&apos;/g, "'");
+
+      const trimmed = pText.trim();
+      if (trimmed.length > 0) {
+        paragraphs.push(trimmed);
+      }
+    }
+
+    if (paragraphs.length > 0) {
+      return paragraphs.join("\n\n");
+    }
+
+    // Fallback: strip tags
+    return xml.replace(/<[^>]+>/g, "").replace(/\n\s*\n/g, "\n\n").trim();
   } catch (e) {
     console.error("Error extracting text from docx:", e);
     return "";
@@ -463,7 +497,9 @@ export async function generateBatchZip(
       const colName = mapping[placeholder];
       if (colName && row[colName] !== undefined && row[colName] !== null) {
         rowData[placeholder] = row[colName];
-      } else if (defaultValues[placeholder] !== undefined) {
+      } else if (row[placeholder] !== undefined && row[placeholder] !== null) {
+        rowData[placeholder] = row[placeholder];
+      } else if (defaultValues[placeholder] !== undefined && defaultValues[placeholder] !== "") {
         rowData[placeholder] = defaultValues[placeholder];
       } else {
         rowData[placeholder] = "";

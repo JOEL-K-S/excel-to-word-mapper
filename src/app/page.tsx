@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useTransition } from "react";
+import React, { useState, useRef, useTransition, useMemo, useEffect } from "react";
 import Link from "next/link";
 import {
   FileSpreadsheet,
@@ -104,6 +104,51 @@ export default function Home() {
   const [isRenderingDocx, setIsRenderingDocx] = useState(false);
   const editorSheetRef = useRef<HTMLDivElement>(null);
   const docxPreviewContainerRef = useRef<HTMLDivElement>(null);
+
+  // Extract all tag keys from the current document editor text
+  const textPlaceholders = useMemo(() => {
+    const matches = documentText.match(/\{([a-zA-Z0-9_\-\.\s#^/]+)\}/g) || [];
+    const set = new Set<string>();
+    matches.forEach((m) => {
+      const clean = m.replace(/[{}]/g, "").trim();
+      if (clean && !clean.startsWith("/") && !clean.startsWith("#")) {
+        set.add(clean);
+      }
+    });
+    return Array.from(set);
+  }, [documentText]);
+
+  // Combined master list of all placeholders (Word file + document text + manual additions)
+  const allPlaceholders = useMemo(() => {
+    const set = new Set<string>();
+    // First, preserve placeholders from Word template if any
+    wordPlaceholders.forEach((p) => set.add(p));
+    // Second, include all tags currently present in the document editor
+    textPlaceholders.forEach((p) => set.add(p));
+    return Array.from(set);
+  }, [wordPlaceholders, textPlaceholders]);
+
+  // Automatically map any unmapped placeholders whenever Excel data or placeholders change
+  useEffect(() => {
+    if (excelData && excelData.headers.length > 0 && allPlaceholders.length > 0) {
+      setMappings((prev) => {
+        let hasChanges = false;
+        const updated = { ...prev };
+
+        allPlaceholders.forEach((ph) => {
+          if (!updated[ph]) {
+            const match = autoMapPlaceholders([ph], excelData.headers);
+            if (match[ph]) {
+              updated[ph] = match[ph];
+              hasChanges = true;
+            }
+          }
+        });
+
+        return hasChanges ? updated : prev;
+      });
+    }
+  }, [excelData, allPlaceholders]);
 
   // UI status & helpers
   const [showTablePreview, setShowTablePreview] = useState(false);
@@ -252,11 +297,12 @@ export default function Home() {
   };
 
   // Re-run Auto Mapping
+  // Re-run Auto Mapping across all active placeholders
   const handleRemapAll = () => {
-    if (!excelData || wordPlaceholders.length === 0) return;
-    const newMappings = autoMapPlaceholders(wordPlaceholders, excelData.headers);
+    if (!excelData || allPlaceholders.length === 0) return;
+    const newMappings = autoMapPlaceholders(allPlaceholders, excelData.headers);
     setMappings(newMappings);
-    triggerToast("Auto-mapped placeholders to closest Excel headers.");
+    triggerToast("Auto-mapped all placeholders to closest spreadsheet headers.");
   };
 
   // Update specific mapping
@@ -299,6 +345,41 @@ export default function Home() {
     });
   };
 
+  // Helper to build robust data payload for a single row
+  const buildRowPayload = (row: Record<string, any>) => {
+    const payload: Record<string, any> = {};
+
+    allPlaceholders.forEach((ph) => {
+      const col = mappings[ph];
+      if (col && row[col] !== undefined && row[col] !== null) {
+        payload[ph] = row[col];
+      } else if (row[ph] !== undefined && row[ph] !== null) {
+        payload[ph] = row[ph];
+      } else {
+        const normPh = ph.toLowerCase().replace(/[^a-z0-9]/g, "");
+        const matchKey = Object.keys(row).find(
+          (k) => k.toLowerCase().replace(/[^a-z0-9]/g, "") === normPh
+        );
+        if (matchKey && row[matchKey] !== undefined && row[matchKey] !== null) {
+          payload[ph] = row[matchKey];
+        } else if (defaultValues[ph] !== undefined && defaultValues[ph] !== "") {
+          payload[ph] = defaultValues[ph];
+        } else {
+          payload[ph] = "";
+        }
+      }
+    });
+
+    // Also include raw row fields so docxtemplater can match unmapped variables
+    Object.keys(row).forEach((k) => {
+      if (!(k in payload)) {
+        payload[k] = row[k];
+      }
+    });
+
+    return payload;
+  };
+
   // ----------------------------------------------------
   // Single Document Download
   // ----------------------------------------------------
@@ -313,22 +394,7 @@ export default function Home() {
       setErrorMessage(null);
 
       const row = excelData.rows[selectedPreviewRow] || excelData.rows[0];
-      const payload: Record<string, any> = {};
-
-      wordPlaceholders.forEach((ph) => {
-        const col = mappings[ph];
-        if (col && row[col] !== undefined && row[col] !== null) {
-          payload[ph] = row[col];
-        } else if (defaultValues[ph] !== undefined && defaultValues[ph] !== "") {
-          payload[ph] = defaultValues[ph];
-        } else {
-          payload[ph] = "";
-        }
-      });
-
-      Object.keys(row).forEach((k) => {
-        if (!(k in payload)) payload[k] = row[k];
-      });
+      const payload = buildRowPayload(row);
 
       const docBlob = generateSingleDocx(rawWordBuffer, payload);
       let outputBlob: Blob;
@@ -365,10 +431,18 @@ export default function Home() {
     setErrorMessage(null);
 
     try {
+      // Ensure all placeholders have active or auto mappings
+      const fullMappings: Record<string, string> = { ...mappings };
+      allPlaceholders.forEach((ph) => {
+        if (!fullMappings[ph] && excelData.headers.includes(ph)) {
+          fullMappings[ph] = ph;
+        }
+      });
+
       const zipBlob = await generateBatchZip(
         rawWordBuffer,
         excelData.rows,
-        mappings,
+        fullMappings,
         defaultValues,
         namingPattern,
         batchFormat,
@@ -391,10 +465,15 @@ export default function Home() {
     }
   };
 
-  // Calculate mapping counts
-  const mappedCount = wordPlaceholders.filter((p) => Boolean(mappings[p])).length;
+  // Calculate mapping counts against all active placeholders
+  const mappedCount = allPlaceholders.filter((p) => {
+    const mapped = mappings[p];
+    if (mapped) return true;
+    if (excelData && excelData.headers.includes(p)) return true;
+    return false;
+  }).length;
   const mappingPercent =
-    wordPlaceholders.length > 0 ? Math.round((mappedCount / wordPlaceholders.length) * 100) : 0;
+    allPlaceholders.length > 0 ? Math.round((mappedCount / allPlaceholders.length) * 100) : 0;
 
   // Active row data helper for live canvas
   const activeRecord = excelData && excelData.rows.length > 0 ? excelData.rows[selectedPreviewRow] : null;
@@ -470,21 +549,7 @@ export default function Home() {
       (async () => {
         try {
           const row = activeRecord || {};
-          const payload: Record<string, any> = {};
-          wordPlaceholders.forEach((ph) => {
-            const col = mappings[ph];
-            if (col && row[col] !== undefined && row[col] !== null) {
-              payload[ph] = row[col];
-            } else if (defaultValues[ph] !== undefined && defaultValues[ph] !== "") {
-              payload[ph] = defaultValues[ph];
-            } else {
-              payload[ph] = "";
-            }
-          });
-          Object.keys(row).forEach((k) => {
-            if (!(k in payload)) payload[k] = row[k];
-          });
-
+          const payload = buildRowPayload(row);
           const docBlob = generateSingleDocx(rawWordBuffer, payload);
           const arrayBuf = await docBlob.arrayBuffer();
           const docx = await import("docx-preview");
@@ -521,6 +586,13 @@ export default function Home() {
     }
     if (activeRecord[tag] !== undefined && activeRecord[tag] !== null) {
       return String(activeRecord[tag]);
+    }
+    const normTag = tag.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const matchKey = Object.keys(activeRecord).find(
+      (k) => k.toLowerCase().replace(/[^a-z0-9]/g, "") === normTag
+    );
+    if (matchKey && activeRecord[matchKey] !== undefined && activeRecord[matchKey] !== null) {
+      return String(activeRecord[matchKey]);
     }
     return defaultValues[tag] || fallback || `{${tag}}`;
   };
@@ -1146,7 +1218,7 @@ export default function Home() {
                   <div className={styles.variablesDockHeader}>
                     <span className={styles.dockTitle}>Spreadsheet Headers &amp; Tags</span>
                     <span className="badge badge-primary" style={{ fontSize: "0.72rem" }}>
-                      {mappedCount} / {wordPlaceholders.length} Mapped
+                      {mappedCount} / {allPlaceholders.length} Mapped
                     </span>
                   </div>
 
@@ -1200,15 +1272,41 @@ export default function Home() {
                     </div>
                   )}
 
+                  {/* Quick Spreadsheet Columns Insertion Bar */}
+                  {excelData && excelData.headers.length > 0 && (
+                    <div className={styles.excelHeadersQuickBar}>
+                      <div className={styles.quickBarTitle}>
+                        <span>Spreadsheet Columns ({excelData.headers.length}):</span>
+                        <span style={{ fontSize: "0.72rem", color: "var(--accent-emerald)" }}>Click to insert</span>
+                      </div>
+                      <div className={styles.excelHeadersChips}>
+                        {excelData.headers.map((h) => (
+                          <button
+                            key={h}
+                            type="button"
+                            className={styles.headerChipBtn}
+                            onClick={() => {
+                              insertVariableAtCursor(h);
+                              handleMappingChange(h, h);
+                            }}
+                            title={`Insert {${h}} into document and map to column '${h}'`}
+                          >
+                            <Plus size={11} /> {h}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Variable Cards List */}
                   <div className={styles.variablesList}>
-                    {wordPlaceholders.length === 0 ? (
+                    {allPlaceholders.length === 0 ? (
                       <div style={{ fontSize: "0.82rem", color: "var(--text-dim)", textAlign: "center", padding: "20px" }}>
-                        No placeholders detected. Click "Add Tag" to create one manually.
+                        No placeholders detected. Click "Add Tag" or click any spreadsheet column above to insert.
                       </div>
                     ) : (
-                      wordPlaceholders.map((ph) => {
-                        const mappedCol = mappings[ph] || "";
+                      allPlaceholders.map((ph) => {
+                        const mappedCol = mappings[ph] || (excelData?.headers.includes(ph) ? ph : "");
                         const sampleVal = activeRecord && mappedCol ? activeRecord[mappedCol] : null;
 
                         return (
@@ -1586,19 +1684,8 @@ export default function Home() {
 
                       {/* Live Filename Preview Box */}
                       {excelData && excelData.rows.length > 0 && (() => {
-                        const previewPayload: Record<string, any> = {};
                         const curRow = excelData.rows[selectedPreviewRow] || {};
-                        wordPlaceholders.forEach((ph) => {
-                          const col = mappings[ph];
-                          if (col && curRow[col] !== undefined && curRow[col] !== null) {
-                            previewPayload[ph] = curRow[col];
-                          } else if (defaultValues[ph]) {
-                            previewPayload[ph] = defaultValues[ph];
-                          }
-                        });
-                        Object.keys(curRow).forEach((k) => {
-                          if (!(k in previewPayload)) previewPayload[k] = curRow[k];
-                        });
+                        const previewPayload = buildRowPayload(curRow);
                         const basePreviewFilename = computeDocFilename(namingPattern, previewPayload, selectedPreviewRow);
                         const previewFilename =
                           batchFormat === "pdf" ? basePreviewFilename.replace(/\.docx$/i, ".pdf") : basePreviewFilename;
