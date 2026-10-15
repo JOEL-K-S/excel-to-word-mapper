@@ -215,6 +215,94 @@ export function generateSingleDocx(
 }
 
 /**
+ * Converts a generated DOCX Blob into a crisp, vector-rendered PDF Blob entirely in-browser.
+ * Dynamically loads docx-preview, jspdf, and html2canvas on demand for optimal initial bundle size.
+ */
+export async function convertDocxBlobToPdfBlob(docxBlob: Blob): Promise<Blob> {
+  const [docx, { jsPDF }, html2canvasModule] = await Promise.all([
+    import("docx-preview"),
+    import("jspdf"),
+    import("html2canvas"),
+  ]);
+  const html2canvas = html2canvasModule.default || html2canvasModule;
+
+  const container = document.createElement("div");
+  container.style.position = "fixed";
+  container.style.top = "-99999px";
+  container.style.left = "-99999px";
+  container.style.width = "794px"; // Standard A4 width at 96 DPI
+  container.style.background = "#ffffff";
+  container.style.color = "#000000";
+  container.style.zIndex = "-1000";
+  document.body.appendChild(container);
+
+  try {
+    const arrayBuffer = await docxBlob.arrayBuffer();
+
+    await docx.renderAsync(arrayBuffer, container, undefined, {
+      inWrapper: true,
+      ignoreWidth: false,
+      ignoreHeight: false,
+      ignoreFonts: false,
+      breakPages: true,
+      useBase64URL: true,
+    });
+
+    // Let the DOM compute styles
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    // Find all docx page wrapper sections
+    const pageWrappers = container.querySelectorAll(".docx-wrapper > section.docx, section.docx");
+
+    const pdf = new jsPDF({
+      orientation: "portrait",
+      unit: "pt",
+      format: "a4",
+      compress: true,
+    });
+
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = pdf.internal.pageSize.getHeight();
+
+    if (pageWrappers.length > 0) {
+      for (let p = 0; p < pageWrappers.length; p++) {
+        const pageEl = pageWrappers[p] as HTMLElement;
+        const canvas = await html2canvas(pageEl, {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          backgroundColor: "#ffffff",
+        });
+
+        if (p > 0) {
+          pdf.addPage("a4", "portrait");
+        }
+
+        const imgData = canvas.toDataURL("image/jpeg", 0.95);
+        pdf.addImage(imgData, "JPEG", 0, 0, pdfWidth, pdfHeight, undefined, "FAST");
+      }
+    } else {
+      const canvas = await html2canvas(container, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: "#ffffff",
+      });
+      const imgData = canvas.toDataURL("image/jpeg", 0.95);
+      const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+      pdf.addImage(imgData, "JPEG", 0, 0, pdfWidth, Math.min(imgHeight, pdfHeight), undefined, "FAST");
+    }
+
+    const pdfOutput = pdf.output("blob");
+    return pdfOutput;
+  } finally {
+    if (container.parentNode) {
+      container.parentNode.removeChild(container);
+    }
+  }
+}
+
+/**
  * Triggers a bulletproof browser download that guarantees the file name and extension
  * are preserved and never lost or aborted by the browser across all operating systems.
  */
@@ -225,11 +313,13 @@ export async function triggerBrowserDownload(blob: Blob, rawFilename: string) {
     ext = ".zip";
   } else if (lower.endsWith(".xlsx")) {
     ext = ".xlsx";
+  } else if (lower.endsWith(".pdf")) {
+    ext = ".pdf";
   } else {
     ext = ".docx";
   }
 
-  // Strip ANY trailing extension from rawFilename so we never get double extensions like .docs.docx
+  // Strip ANY trailing extension from rawFilename so we never get double extensions
   let baseName = (rawFilename || "").replace(/\.[a-zA-Z0-9]+$/i, "").trim();
   baseName = sanitizeFilename(baseName) || "Generated_Document";
 
@@ -241,6 +331,7 @@ export async function triggerBrowserDownload(blob: Blob, rawFilename: string) {
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     ".zip": "application/zip",
+    ".pdf": "application/pdf",
   };
 
   const targetMime = MIME_TYPES[ext] || blob.type || "application/octet-stream";
@@ -324,6 +415,7 @@ export async function triggerBrowserDownload(blob: Blob, rawFilename: string) {
 
 /**
  * Generates batch documents for all rows and bundles them into a ZIP archive.
+ * Supports exporting individual documents as either .docx or .pdf.
  */
 export async function generateBatchZip(
   templateBuffer: ArrayBuffer,
@@ -331,6 +423,7 @@ export async function generateBatchZip(
   mapping: Record<string, string>, // placeholder -> excelColumn
   defaultValues: Record<string, string>,
   fileNamePattern: string,
+  exportFormat: "docx" | "pdf" = "docx",
   onProgress?: (progress: GenerationProgress) => void
 ): Promise<Blob> {
   const zip = new JSZip();
@@ -361,12 +454,19 @@ export async function generateBatchZip(
 
     // Generate individual docx
     const docBlob = generateSingleDocx(templateBuffer, rowData);
+    let outputBlob: Blob;
+    let filename: string;
 
-    // Compute dynamic, safe file name with guaranteed .docx extension
-    const filename = computeDocFilename(fileNamePattern, rowData, i);
+    if (exportFormat === "pdf") {
+      outputBlob = await convertDocxBlobToPdfBlob(docBlob);
+      filename = computeDocFilename(fileNamePattern, rowData, i).replace(/\.docx$/i, ".pdf");
+    } else {
+      outputBlob = docBlob;
+      filename = computeDocFilename(fileNamePattern, rowData, i);
+    }
 
     // Add to ZIP
-    zip.file(filename, docBlob);
+    zip.file(filename, outputBlob);
 
     // Report progress
     if (onProgress) {
@@ -376,7 +476,7 @@ export async function generateBatchZip(
         current,
         total,
         percentage,
-        status: `Generating document ${current} of ${total} (${filename})...`,
+        status: `Generating ${exportFormat.toUpperCase()} document ${current} of ${total} (${filename})...`,
       });
     }
 

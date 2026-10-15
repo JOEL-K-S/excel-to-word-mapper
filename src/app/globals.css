@@ -223,6 +223,12 @@ body::after {
   border: 1px solid rgba(6, 182, 212, 0.3);
 }
 
+.badge-rose {
+  background: rgba(244, 63, 94, 0.15);
+  color: #fda4af;
+  border: 1px solid rgba(244, 63, 94, 0.3);
+}
+
 .code-tag {
   font-family: var(--font-code);
   font-size: 0.85rem;

@@ -22,6 +22,7 @@ import {
   HelpCircle,
   Check,
   X,
+  FileDown,
 } from "lucide-react";
 import styles from "./page.module.css";
 import {
@@ -36,6 +37,7 @@ import {
   generateSampleWordTemplate,
   computeDocFilename,
   triggerBrowserDownload,
+  convertDocxBlobToPdfBlob,
   GenerationProgress,
 } from "@/lib/wordProcessor";
 import { autoMapPlaceholders } from "@/lib/matcher";
@@ -65,6 +67,7 @@ export default function Home() {
   // Generation state
   const [selectedPreviewRow, setSelectedPreviewRow] = useState<number>(0);
   const [namingPattern, setNamingPattern] = useState<string>("Document_{Employee_Name}.docx");
+  const [exportFormat, setExportFormat] = useState<"docx" | "pdf">("docx");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState<GenerationProgress | null>(null);
 
@@ -388,13 +391,20 @@ function validateUploadedFile(
         if (!(k in payload)) payload[k] = row[k];
       });
 
-      const blob = generateSingleDocx(rawWordBuffer, payload);
+      const docBlob = generateSingleDocx(rawWordBuffer, payload);
+      let outputBlob: Blob;
+      let filename: string;
 
-      // Compute safe single file name with guaranteed .docx extension
-      const filename = computeDocFilename(namingPattern, payload, selectedPreviewRow);
+      if (exportFormat === "pdf") {
+        outputBlob = await convertDocxBlobToPdfBlob(docBlob);
+        filename = computeDocFilename(namingPattern, payload, selectedPreviewRow).replace(/\.docx$/i, ".pdf");
+      } else {
+        outputBlob = docBlob;
+        filename = computeDocFilename(namingPattern, payload, selectedPreviewRow);
+      }
 
       // Trigger safe browser download with persistent URL
-      await triggerBrowserDownload(blob, filename);
+      await triggerBrowserDownload(outputBlob, filename);
 
       triggerToast(`Downloaded: ${filename}`);
     } catch (err: any) {
@@ -422,6 +432,7 @@ function validateUploadedFile(
         mappings,
         defaultValues,
         namingPattern,
+        exportFormat,
         (progress) => {
           setGenerationProgress(progress);
         }
@@ -429,10 +440,10 @@ function validateUploadedFile(
 
       // Download ZIP with guaranteed safe filename & extension
       const safeSheetName = (excelData.activeSheet || "Documents").replace(/[/\\?%*:|"<>]/g, "_");
-      const zipFilename = `${safeSheetName}_Generated_Documents.zip`;
+      const zipFilename = `${safeSheetName}_Generated_${exportFormat.toUpperCase()}.zip`;
       await triggerBrowserDownload(zipBlob, zipFilename);
 
-      triggerToast(`Batch complete! Downloaded ${excelData.rows.length} documents in ZIP.`);
+      triggerToast(`Batch complete! Downloaded ${excelData.rows.length} ${exportFormat.toUpperCase()} files in ZIP.`);
     } catch (err: any) {
       console.error(err);
       setErrorMessage("Batch generation failed: " + err.message);
@@ -1146,12 +1157,130 @@ function validateUploadedFile(
       {/* ======================================================== */}
       {activeStep === 3 && (
         <div className="animate-fade-in">
+          {/* Format Selection Banner */}
+          <div
+            className="glass-panel"
+            style={{
+              padding: "20px 24px",
+              marginBottom: "24px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "14px",
+              border: "1px solid var(--border-glow)",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+              <div>
+                <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#ffffff", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <FileDown size={20} style={{ color: "var(--accent-cyan)" }} />
+                  Choose Output Format Before Downloading
+                </div>
+                <div style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                  Select whether to generate editable Microsoft Word documents or print-ready PDF files.
+                </div>
+              </div>
+              <span className={`badge ${exportFormat === "docx" ? "badge-primary" : "badge-rose"}`} style={{ fontSize: "0.82rem", padding: "6px 14px" }}>
+                Active Format: {exportFormat === "docx" ? "Word (.docx)" : "Adobe PDF (.pdf)"}
+              </span>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "14px" }}>
+              {/* Word Option Card */}
+              <button
+                type="button"
+                onClick={() => setExportFormat("docx")}
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "14px",
+                  padding: "16px 18px",
+                  borderRadius: "var(--radius-md)",
+                  border: exportFormat === "docx" ? "2px solid var(--primary-light)" : "1px solid var(--border-subtle)",
+                  background: exportFormat === "docx" ? "rgba(79, 70, 229, 0.16)" : "rgba(255, 255, 255, 0.03)",
+                  boxShadow: exportFormat === "docx" ? "0 0 20px rgba(79, 70, 229, 0.25)" : "none",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  transition: "all var(--transition-fast)",
+                }}
+              >
+                <div
+                  style={{
+                    padding: "10px",
+                    borderRadius: "var(--radius-sm)",
+                    background: exportFormat === "docx" ? "var(--primary)" : "rgba(255, 255, 255, 0.08)",
+                    color: "#ffffff",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <FileText size={22} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span style={{ fontWeight: 700, fontSize: "0.98rem", color: "#ffffff" }}>
+                      Microsoft Word (.docx)
+                    </span>
+                    {exportFormat === "docx" && <Check size={16} style={{ color: "var(--accent-emerald)" }} />}
+                  </div>
+                  <p style={{ margin: "4px 0 0 0", fontSize: "0.82rem", color: "var(--text-muted)", lineHeight: 1.4 }}>
+                    Preserves original formatting, tables, images, and font styles. Fully editable in Word or Docs.
+                  </p>
+                </div>
+              </button>
+
+              {/* PDF Option Card */}
+              <button
+                type="button"
+                onClick={() => setExportFormat("pdf")}
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "14px",
+                  padding: "16px 18px",
+                  borderRadius: "var(--radius-md)",
+                  border: exportFormat === "pdf" ? "2px solid var(--accent-rose)" : "1px solid var(--border-subtle)",
+                  background: exportFormat === "pdf" ? "rgba(244, 63, 94, 0.16)" : "rgba(255, 255, 255, 0.03)",
+                  boxShadow: exportFormat === "pdf" ? "0 0 20px rgba(244, 63, 94, 0.25)" : "none",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  transition: "all var(--transition-fast)",
+                }}
+              >
+                <div
+                  style={{
+                    padding: "10px",
+                    borderRadius: "var(--radius-sm)",
+                    background: exportFormat === "pdf" ? "var(--accent-rose)" : "rgba(255, 255, 255, 0.08)",
+                    color: "#ffffff",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <FileDown size={22} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span style={{ fontWeight: 700, fontSize: "0.98rem", color: "#ffffff" }}>
+                      Adobe PDF (.pdf)
+                    </span>
+                    {exportFormat === "pdf" && <Check size={16} style={{ color: "var(--accent-emerald)" }} />}
+                  </div>
+                  <p style={{ margin: "4px 0 0 0", fontSize: "0.82rem", color: "var(--text-muted)", lineHeight: 1.4 }}>
+                    Converted directly in your browser. Ready for instant printing, sending, or archival without edits.
+                  </p>
+                </div>
+              </button>
+            </div>
+          </div>
+
           {/* Progress Bar during Batch Generation */}
           {isGenerating && generationProgress && (
             <div className={`${styles.progressContainer} animate-fade-in`} style={{ marginBottom: "28px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontWeight: 700, color: "#ffffff" }}>
-                  Generating Documents...
+                  Generating {exportFormat.toUpperCase()} Documents...
                 </span>
                 <span className="badge badge-primary">
                   {generationProgress.percentage}%
@@ -1179,13 +1308,17 @@ function validateUploadedFile(
             <div className={`glass-panel ${styles.generateCard}`}>
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
-                  <FileText size={24} style={{ color: "var(--primary-light)" }} />
+                  {exportFormat === "pdf" ? (
+                    <FileDown size={24} style={{ color: "var(--accent-rose)" }} />
+                  ) : (
+                    <FileText size={24} style={{ color: "var(--primary-light)" }} />
+                  )}
                   <h3 style={{ fontSize: "1.2rem", fontWeight: 700, color: "#ffffff" }}>
                     Single Document Test
                   </h3>
                 </div>
                 <p className={styles.cardDesc}>
-                  Select any row from your Excel sheet to preview the interpolated values and download a single filled Word document.
+                  Select any row from your Excel sheet to preview the interpolated values and download a single filled {exportFormat.toUpperCase()} document.
                 </p>
               </div>
 
@@ -1244,7 +1377,7 @@ function validateUploadedFile(
                 onClick={handleDownloadSingle}
                 disabled={isGenerating}
               >
-                <Download size={16} /> Download Single Document (.docx)
+                <Download size={16} /> Download Single Document (.{exportFormat})
               </button>
             </div>
 
@@ -1258,7 +1391,7 @@ function validateUploadedFile(
                   </h3>
                 </div>
                 <p className={styles.cardDesc}>
-                  Generate separate customized Word documents for all <strong>{excelData?.totalRows || 0}</strong> rows in the sheet, packaged neatly in a single ZIP download.
+                  Generate separate customized {exportFormat === "pdf" ? "PDF" : "Word"} documents for all <strong>{excelData?.totalRows || 0}</strong> rows in the sheet, packaged neatly in a single ZIP download.
                 </p>
               </div>
 
@@ -1289,7 +1422,11 @@ function validateUploadedFile(
                   Object.keys(curRow).forEach((k) => {
                     if (!(k in previewPayload)) previewPayload[k] = curRow[k];
                   });
-                  const previewFilename = computeDocFilename(namingPattern, previewPayload, selectedPreviewRow);
+                  const basePreviewFilename = computeDocFilename(namingPattern, previewPayload, selectedPreviewRow);
+                  const previewFilename = exportFormat === "pdf"
+                    ? basePreviewFilename.replace(/\.docx$/i, ".pdf")
+                    : basePreviewFilename;
+
                   return (
                     <div style={{
                       marginTop: "8px",
@@ -1363,6 +1500,12 @@ function validateUploadedFile(
                   <strong style={{ color: "#ffffff" }}>{excelData?.totalRows || 0} Files</strong>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ color: "var(--text-muted)" }}>Document Format:</span>
+                  <strong style={{ color: exportFormat === "pdf" ? "var(--accent-rose)" : "var(--primary-light)", textTransform: "uppercase" }}>
+                    .{exportFormat} ({exportFormat === "pdf" ? "Adobe PDF" : "Word Document"})
+                  </strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
                   <span style={{ color: "var(--text-muted)" }}>Mapped Fields:</span>
                   <strong style={{ color: "var(--accent-emerald)" }}>
                     {mappedCount} / {wordPlaceholders.length}
@@ -1387,11 +1530,11 @@ function validateUploadedFile(
               >
                 {isGenerating ? (
                   <>
-                    <RefreshCw size={18} className="animate-spin" /> Generating Documents...
+                    <RefreshCw size={18} className="animate-spin" /> Generating {exportFormat.toUpperCase()} Documents...
                   </>
                 ) : (
                   <>
-                    <Download size={18} /> Generate &amp; Download ZIP ({excelData?.totalRows || 0} Files)
+                    <Download size={18} /> Generate &amp; Download ZIP ({excelData?.totalRows || 0} .{exportFormat} Files)
                   </>
                 )}
               </button>
