@@ -210,7 +210,15 @@ export default function PrivacyPage() {
           </a>
         </div>
         <div>
-          Last updated: October 2026 • Free &amp; Open Source under the MIT License
+          Last updated: October 2026 • Free &amp; Open Source under the MIT License • Created by{" "}
+          <a
+            href="https://github.com/JOEL-K-S"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: "var(--primary-light)", textDecoration: "none", fontWeight: 600 }}
+          >
+            JOEL-K-S
+          </a>
         </div>
       </footer>
     </div>

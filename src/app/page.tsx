@@ -1786,8 +1786,17 @@ function validateUploadedFile(
             </button>
           </div>
 
-          <p style={{ margin: 0, fontSize: "0.8rem", color: "var(--text-dim)" }}>
-            Free and open-source under the MIT License. 100% Client-Side. No telemetry or server storage.
+          <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--text-dim)" }}>
+            Free and open-source under the MIT License • Created by{" "}
+            <a
+              href="https://github.com/JOEL-K-S"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: "var(--primary-light)", textDecoration: "none", fontWeight: 600 }}
+            >
+              JOEL-K-S
+            </a>
+            . 100% Client-Side. No telemetry or server storage.
           </p>
         </footer>
       </section>
