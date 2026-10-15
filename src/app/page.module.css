@@ -1,0 +1,994 @@
+.container {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 32px 24px 80px;
+}
+
+/* Header */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-bottom: 36px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.brandIcon {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 24px rgba(79, 70, 229, 0.35);
+  color: white;
+}
+
+.brandText h1 {
+  font-size: 1.65rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.brandText p {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Wizard Steps Bar */
+.wizardNav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 36px;
+  background: var(--bg-card);
+  padding: 8px 12px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-subtle);
+}
+
+.wizardStep {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 20px;
+  border-radius: var(--radius-full);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.wizardStep.active {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(6, 182, 212, 0.15) 100%);
+  color: #ffffff;
+  border: 1px solid var(--border-glow);
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.2);
+}
+
+.wizardStep.completed {
+  color: var(--accent-emerald);
+}
+
+.stepNumber {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.active .stepNumber {
+  background: var(--primary);
+  color: white;
+}
+
+.completed .stepNumber {
+  background: var(--accent-emerald);
+  color: white;
+}
+
+/* Sample Banner */
+.sampleBanner {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(6, 182, 212, 0.08) 100%);
+  border: 1px dashed rgba(99, 102, 241, 0.4);
+  border-radius: var(--radius-md);
+  padding: 16px 24px;
+  margin-bottom: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.sampleInfo {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.sampleIcon {
+  color: var(--accent-cyan);
+  font-size: 1.5rem;
+}
+
+.sampleTitle {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #ffffff;
+}
+
+.sampleDesc {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* Upload Grid (Step 1) */
+.uploadGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 28px;
+  margin-bottom: 32px;
+}
+
+.dropzoneCard {
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.cardTitle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.dropArea {
+  border: 2px dashed rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-md);
+  padding: 44px 24px;
+  text-align: center;
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.2);
+  transition: all 0.25s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.dropArea:hover, .dropArea.dragActive {
+  border-color: var(--primary-light);
+  background: rgba(99, 102, 241, 0.08);
+  box-shadow: inset 0 0 20px rgba(99, 102, 241, 0.15);
+}
+
+.dropIcon {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary-light);
+  margin-bottom: 6px;
+}
+
+.dropTextPrimary {
+  font-weight: 700;
+  font-size: 1rem;
+  color: #ffffff;
+}
+
+.dropTextSecondary {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.fileActiveCard {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fileSummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.fileMeta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.fileName {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #ffffff;
+  word-break: break-all;
+}
+
+.fileStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.sheetSelector {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.sheetSelector label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.tagList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: 160px;
+  overflow-y: auto;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+/* Step 2: Mapping Section */
+.mappingCard {
+  padding: 32px;
+  margin-bottom: 32px;
+}
+
+.mappingHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 28px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.mappingStats {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.mappingList {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 28px;
+}
+
+.mappingRow {
+  display: grid;
+  grid-template-columns: 280px 48px 1fr 220px 40px;
+  align-items: center;
+  gap: 16px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 14px 20px;
+  transition: all 0.2s ease;
+}
+
+.mappingRow:hover {
+  background: rgba(0, 0, 0, 0.4);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.mappingRow.unmapped {
+  border-left: 4px solid var(--accent-amber);
+}
+
+.mappingRow.mapped {
+  border-left: 4px solid var(--accent-emerald);
+}
+
+.placeholderCol {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.arrowCol {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+}
+
+.arrowCol.active {
+  color: var(--accent-emerald);
+}
+
+.selectCol {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.previewValue {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.defaultCol {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.defaultCol label {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Excel Preview Table */
+.previewTableSection {
+  margin-top: 32px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 24px;
+}
+
+.tableWrapper {
+  overflow-x: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  margin-top: 14px;
+  max-height: 320px;
+}
+
+.dataTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  text-align: left;
+}
+
+.dataTable th {
+  background: rgba(18, 24, 38, 0.95);
+  color: var(--primary-light);
+  font-weight: 700;
+  padding: 12px 16px;
+  position: sticky;
+  top: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+
+.dataTable td {
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  color: var(--text-main);
+  white-space: nowrap;
+}
+
+.dataTable tr:hover td {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* Step 3: Generation & Export */
+.generateGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 28px;
+  margin-bottom: 32px;
+}
+
+.generateCard {
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.cardDesc {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.previewBox {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  max-height: 220px;
+  overflow-y: auto;
+  font-size: 0.82rem;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.previewItem {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.previewKey {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.previewVal {
+  color: #38bdf8;
+  font-family: var(--font-code);
+}
+
+.namingPatternSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.helperChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.chipBtn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-subtle);
+  color: var(--primary-light);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  font-family: var(--font-code);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.chipBtn:hover {
+  background: rgba(99, 102, 241, 0.2);
+  border-color: var(--primary);
+  color: #ffffff;
+}
+
+/* Progress Section */
+.progressContainer {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border-glow);
+  border-radius: var(--radius-md);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 0 20px rgba(99, 102, 241, 0.15);
+}
+
+.progressBarTrack {
+  width: 100%;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.progressBarFill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary) 0%, var(--accent-cyan) 100%);
+  border-radius: var(--radius-full);
+  transition: width 0.3s ease;
+}
+
+.progressStatus {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* Footer & Navigation */
+.navFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 36px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* =======================================================
+   RESPONSIVE — Tablet (≤ 900px)
+   ======================================================= */
+@media (max-width: 900px) {
+  .container {
+    padding: 24px 16px 60px;
+  }
+
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .headerActions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .headerActions .btn {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .wizardStep {
+    padding: 10px 12px;
+    font-size: 0.82rem;
+    gap: 6px;
+  }
+
+  .wizardStep span:not(.stepNumber) {
+    display: none;
+  }
+
+  .uploadGrid,
+  .generateGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .mappingRow {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 14px 16px;
+  }
+
+  .arrowCol {
+    display: none;
+  }
+
+  .mappingHeader {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .mappingStats {
+    width: 100%;
+  }
+
+  .mappingCard {
+    padding: 20px;
+  }
+
+  .generateCard {
+    padding: 22px;
+  }
+
+  .sampleBanner {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 16px;
+  }
+
+  .navFooter {
+    flex-direction: column;
+    gap: 14px;
+    align-items: stretch;
+  }
+
+  .navFooter .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .previewItem {
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .progressStatus {
+    flex-direction: column;
+    gap: 4px;
+  }
+}
+
+/* =======================================================
+   RESPONSIVE — Small Tablet / Large Phone (≤ 640px)
+   ======================================================= */
+@media (max-width: 640px) {
+  .container {
+    padding: 16px 12px 48px;
+  }
+
+  .brand {
+    gap: 12px;
+  }
+
+  .brandIcon {
+    width: 42px;
+    height: 42px;
+  }
+
+  .brandText h1 {
+    font-size: 1.25rem;
+  }
+
+  .brandText p {
+    font-size: 0.78rem;
+    line-height: 1.4;
+  }
+
+  .wizardNav {
+    padding: 6px 8px;
+    gap: 6px;
+    margin-bottom: 24px;
+  }
+
+  .wizardStep {
+    padding: 10px 8px;
+    font-size: 0.78rem;
+  }
+
+  .stepNumber {
+    width: 24px;
+    height: 24px;
+    font-size: 0.72rem;
+  }
+
+  .dropzoneCard {
+    padding: 16px;
+  }
+
+  .dropArea {
+    padding: 32px 16px;
+    gap: 10px;
+  }
+
+  .dropIcon {
+    width: 48px;
+    height: 48px;
+  }
+
+  .dropTextPrimary {
+    font-size: 0.9rem;
+  }
+
+  .dropTextSecondary {
+    font-size: 0.76rem;
+  }
+
+  .fileActiveCard {
+    padding: 14px;
+    gap: 12px;
+  }
+
+  .fileSummary {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .fileName {
+    font-size: 0.85rem;
+  }
+
+  .cardTitle {
+    font-size: 1rem;
+  }
+
+  .mappingRow {
+    padding: 12px;
+  }
+
+  .placeholderCol {
+    flex-wrap: wrap;
+  }
+
+  .selectCol select {
+    width: 100%;
+  }
+
+  .defaultCol input {
+    width: 100%;
+  }
+
+  .previewBox {
+    padding: 12px;
+    max-height: 180px;
+  }
+
+  .helperChips {
+    gap: 5px;
+  }
+
+  .chipBtn {
+    font-size: 0.7rem;
+    padding: 3px 6px;
+  }
+
+  .tableWrapper {
+    max-height: 240px;
+  }
+
+  .dataTable th,
+  .dataTable td {
+    padding: 8px 10px;
+    font-size: 0.78rem;
+  }
+
+  .progressContainer {
+    padding: 16px;
+  }
+
+  .tagList {
+    max-height: 120px;
+    padding: 8px;
+    gap: 6px;
+  }
+}
+
+/* =======================================================
+   RESPONSIVE — Smartphone (≤ 480px)
+   ======================================================= */
+@media (max-width: 480px) {
+  .container {
+    padding: 12px 10px 40px;
+  }
+
+  .header {
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    gap: 12px;
+  }
+
+  .headerActions {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .headerActions .btn {
+    width: 100%;
+    font-size: 0.84rem;
+    padding: 10px 14px;
+  }
+
+  .brandIcon {
+    width: 38px;
+    height: 38px;
+  }
+
+  .brandText h1 {
+    font-size: 1.1rem;
+  }
+
+  .brandText p {
+    font-size: 0.72rem;
+  }
+
+  .wizardNav {
+    gap: 4px;
+    padding: 5px 6px;
+    margin-bottom: 18px;
+    border-radius: var(--radius-md);
+  }
+
+  .wizardStep {
+    padding: 8px 6px;
+    gap: 4px;
+    border-radius: var(--radius-md);
+  }
+
+  .stepNumber {
+    width: 22px;
+    height: 22px;
+    font-size: 0.68rem;
+  }
+
+  .sampleBanner {
+    padding: 12px;
+    gap: 12px;
+    border-radius: var(--radius-sm);
+  }
+
+  .sampleInfo {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .sampleTitle {
+    font-size: 0.88rem;
+  }
+
+  .sampleDesc {
+    font-size: 0.78rem;
+  }
+
+  .dropzoneCard {
+    padding: 12px;
+    border-radius: var(--radius-md);
+  }
+
+  .dropArea {
+    padding: 28px 12px;
+    border-radius: var(--radius-sm);
+  }
+
+  .dropIcon {
+    width: 42px;
+    height: 42px;
+  }
+
+  .dropTextPrimary {
+    font-size: 0.84rem;
+  }
+
+  .cardHeader {
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .cardTitle {
+    font-size: 0.92rem;
+    gap: 8px;
+  }
+
+  .fileActiveCard {
+    padding: 12px;
+  }
+
+  .sheetSelector {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .sheetSelector select {
+    width: 100%;
+  }
+
+  .mappingCard {
+    padding: 14px;
+    margin-bottom: 20px;
+    border-radius: var(--radius-md);
+  }
+
+  .mappingHeader {
+    gap: 12px;
+    margin-bottom: 18px;
+    padding-bottom: 14px;
+  }
+
+  .mappingHeader h2 {
+    font-size: 1.05rem !important;
+  }
+
+  .mappingStats {
+    gap: 8px;
+  }
+
+  .mappingStats .btn {
+    font-size: 0.78rem;
+    padding: 6px 10px;
+  }
+
+  .mappingRow {
+    padding: 10px;
+    gap: 8px;
+    border-radius: var(--radius-sm);
+  }
+
+  .generateCard {
+    padding: 16px;
+    gap: 16px;
+    border-radius: var(--radius-md);
+  }
+
+  .cardDesc {
+    font-size: 0.82rem;
+  }
+
+  .previewBox {
+    padding: 10px;
+    max-height: 160px;
+    font-size: 0.76rem;
+  }
+
+  .previewKey {
+    font-size: 0.74rem;
+  }
+
+  .previewVal {
+    font-size: 0.74rem;
+    word-break: break-all;
+  }
+
+  .namingPatternSection input {
+    font-size: 0.82rem;
+  }
+
+  .navFooter {
+    margin-top: 24px;
+    padding-top: 16px;
+    gap: 10px;
+  }
+
+  .progressContainer {
+    padding: 12px;
+    gap: 10px;
+  }
+
+  .progressBarTrack {
+    height: 8px;
+  }
+
+  .progressStatus {
+    font-size: 0.78rem;
+  }
+}
