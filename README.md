@@ -5,6 +5,7 @@
 
 [![Next.js](https://img.shields.io/badge/Next.js-16.4-black?logo=next.js)](https://nextjs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue?logo=typescript)](https://www.typescriptlang.org)
+[![CI](https://github.com/JOEL-K-S/excel-to-word-mapper/actions/workflows/ci.yml/badge.svg)](https://github.com/JOEL-K-S/excel-to-word-mapper/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-emerald.svg)](LICENSE)
 [![Privacy: 100% Client-Side](https://img.shields.io/badge/Privacy-100%25%20Client--Side-indigo.svg)](#privacy--security-guarantee)
 
