@@ -23,13 +23,19 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "Excel to Word Mapper | Automated Document Generation",
+    default: "Excel to Word Mapper | The First Web Excel to Report Online Creator",
     template: "%s | Excel to Word Mapper",
   },
   description:
-    "Process Excel spreadsheets into personalized Word document templates using intelligent column-to-placeholder mapping and batch ZIP export. 100% private, client-side processing.",
+    "The first 100% in-browser Web Excel to Report online creator. Transform spreadsheets (.xlsx, .csv) into personalized Word documents & PDF reports with zero server uploads.",
   keywords: [
+    "first web excel to report online creator",
+    "web excel to report online creator",
+    "excel to report creator online",
+    "online excel report maker",
+    "automated excel to report generator",
     "excel to word mapper",
+    "browser based report creator",
     "mail merge alternative",
     "bulk docx generator",
     "excel to pdf generator",
@@ -65,9 +71,9 @@ export const metadata: Metadata = {
     },
   },
   openGraph: {
-    title: "Excel to Word Mapper | Automated Document Generation",
+    title: "Excel to Word Mapper | The First Web Excel to Report Online Creator",
     description:
-      "Automate personalized Word documents and PDFs from Excel spreadsheets. 100% client-side privacy, dynamic file naming, and fast ZIP batch download.",
+      "The first 100% in-browser Web Excel to Report online creator. Transform spreadsheets into personalized Word documents & PDF reports with zero server uploads.",
     url: siteUrl,
     siteName: "Excel to Word Mapper",
     locale: "en_US",
@@ -75,9 +81,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Excel to Word Mapper | Automated Document Generation",
+    title: "Excel to Word Mapper | The First Web Excel to Report Online Creator",
     description:
-      "Merge Excel data into Word templates and download as DOCX or PDF in batch ZIP. Free & 100% private.",
+      "The first 100% in-browser Web Excel to Report online creator. Generate custom Word & PDF reports from spreadsheet data with zero cloud uploads.",
   },
 };
 
@@ -87,10 +93,10 @@ const jsonLd = {
     {
       "@type": "WebApplication",
       "@id": `${siteUrl}/#webapp`,
-      "name": "Excel to Word Mapper",
+      "name": "Excel to Word Mapper - The First Web Excel to Report Online Creator",
       "url": siteUrl,
       "description":
-        "Free, 100% private in-browser document generation tool that maps Excel spreadsheet data into Word (.docx) templates and bulk exports personalized Word files or PDFs in ZIP.",
+        "The first 100% in-browser Web Excel to Report online creator. Free, private tool that maps spreadsheet data into Word (.docx) templates and bulk exports personalized Word files or PDF reports in ZIP.",
       "applicationCategory": "BusinessApplication",
       "operatingSystem": "All modern browsers (Chrome, Edge, Firefox, Safari)",
       "offers": {

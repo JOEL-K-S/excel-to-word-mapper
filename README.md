@@ -1,7 +1,7 @@
 # Excel to Word Mapper
 
-> **Automated In-Browser Document Generation & Bulk Mail Merge Alternative**  
-> Map Excel spreadsheet columns to Word templates and export personalized documents as **Word (.docx)** or **PDF (.pdf)** in batch ZIP archives. 100% client-side with zero cloud server uploads.
+> **The First Web Excel to Report Online Creator & Bulk Document Generator**  
+> Transform Excel spreadsheets (.xlsx, .csv) into custom Word documents (.docx) and PDF reports in batch ZIP archives. 100% in-browser, zero cloud server uploads.
 
 [![Next.js](https://img.shields.io/badge/Next.js-16.4-black?logo=next.js)](https://nextjs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue?logo=typescript)](https://www.typescriptlang.org)

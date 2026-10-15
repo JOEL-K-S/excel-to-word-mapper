@@ -1567,12 +1567,12 @@ function validateUploadedFile(
       <section className={styles.seoSection} aria-label="Feature Guide and Frequently Asked Questions">
         <header className={styles.seoHeader}>
           <span className="badge badge-primary" style={{ marginBottom: "12px", display: "inline-block" }}>
-            The Modern Mail Merge Alternative
+            The First Web Excel to Report Online Creator
           </span>
-          <h2>Automate Personalized Documents Directly in Your Browser</h2>
+          <h2>The First Web Excel to Report Online Creator</h2>
           <p>
-            Excel to Word Mapper is a free, privacy-first document automation tool. 
-            Map spreadsheet columns to Word templates and export individual Word documents or converted PDFs in bulk ZIP archives—with zero server uploads.
+            Excel to Word Mapper is the premier 100% in-browser Web Excel-to-Report online creator. 
+            Map spreadsheet columns to custom templates and export personalized Word documents or converted PDF reports in bulk ZIP archives—with zero server uploads.
           </p>
         </header>
 
